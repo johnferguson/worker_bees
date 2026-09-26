@@ -5,3 +5,10 @@
 
 top_level_directory = 'C:/worker_bees'
 required_folders = ['001_queue', '002_running', '003_failed', '004_complete']
+
+# queue_folder is where waiting jobs go (one of the required_folders)
+queue_folder = '001_queue'
+
+# forward_days is how many days ahead ZZZ_build_queue.py writes jobs,
+# so the queue keeps going even if the nightly build misses a few nights
+forward_days = 7
