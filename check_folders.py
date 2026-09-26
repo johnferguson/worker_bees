@@ -1,6 +1,6 @@
 """Check that the worker_bees folders exist.
 
-Reads top_level_directory from 000_worker_bees_queue.config (in the same
+Reads top_level_directory from 000_worker_bees_queue.toml (in the same
 folder as this script) and checks that it contains the queue, running,
 failed and finished folders.
 
@@ -8,26 +8,11 @@ Run it with:  uv run check_folders.py
 """
 
 import sys
+import tomllib
 from pathlib import Path
 
-CONFIG_FILE = Path(__file__).parent / "000_worker_bees_queue.config"
+CONFIG_FILE = Path(__file__).parent / "000_worker_bees_queue.toml"
 FOLDERS = ["queue", "running", "failed", "finished"]
-
-
-def read_config(path):
-    """Return the config file as a dict of {name: value}.
-
-    Blank lines and lines starting with # are ignored.
-    """
-    settings = {}
-    # utf-8-sig copes with the invisible marker Notepad sometimes adds
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        name, value = line.split("=", 1)
-        settings[name.strip()] = value.strip()
-    return settings
 
 
 def main():
@@ -35,7 +20,12 @@ def main():
         print(f"Config file not found: {CONFIG_FILE}")
         return 1
 
-    settings = read_config(CONFIG_FILE)
+    # utf-8-sig copes with the invisible marker Notepad sometimes adds
+    try:
+        settings = tomllib.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
+    except tomllib.TOMLDecodeError as error:
+        print(f"Could not read {CONFIG_FILE}: {error}")
+        return 1
     if "top_level_directory" not in settings:
         print(f"top_level_directory is not set in {CONFIG_FILE}")
         return 1

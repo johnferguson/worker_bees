@@ -3,5 +3,6 @@
 # top_level_directory is the shared folder that holds the
 # queue, running, failed and finished folders.
 # Use the full network path (\\server\share\...), not a mapped drive letter.
+# Use single quotes around Windows paths so the backslashes are kept as typed.
 
-top_level_directory = \\fileserver\worker_bees
+top_level_directory = '\\fileserver\worker_bees'
