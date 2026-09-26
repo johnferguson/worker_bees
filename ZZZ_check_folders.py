@@ -1,10 +1,10 @@
 """Check that the worker_bees folders exist.
 
-Reads top_level_directory from 000_worker_bees_queue.toml (in the same
-folder as this script) and checks that it contains the queue, running,
-failed and finished folders.
+Reads top_level_directory and required_folders from
+000_worker_bees_queue.toml (in the same folder as this script) and checks
+that every required folder exists inside the top level directory.
 
-Run it with:  uv run check_folders.py
+Run it with:  uv run ZZZ_check_folders.py
 """
 
 import sys
@@ -12,7 +12,6 @@ import tomllib
 from pathlib import Path
 
 CONFIG_FILE = Path(__file__).parent / "000_worker_bees_queue.toml"
-FOLDERS = ["queue", "running", "failed", "finished"]
 
 
 def main():
@@ -26,9 +25,11 @@ def main():
     except tomllib.TOMLDecodeError as error:
         print(f"Could not read {CONFIG_FILE}: {error}")
         return 1
-    if "top_level_directory" not in settings:
-        print(f"top_level_directory is not set in {CONFIG_FILE}")
-        return 1
+
+    for name in ["top_level_directory", "required_folders"]:
+        if name not in settings:
+            print(f"{name} is not set in {CONFIG_FILE}")
+            return 1
 
     top_dir = Path(settings["top_level_directory"])
     print(f"Top level directory: {top_dir}")
@@ -38,7 +39,7 @@ def main():
         return 1
 
     missing = []
-    for name in FOLDERS:
+    for name in settings["required_folders"]:
         folder = top_dir / name
         if folder.is_dir():
             print(f"  ok       {folder}")

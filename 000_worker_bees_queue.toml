@@ -1,8 +1,7 @@
 # worker_bees settings
 #
-# top_level_directory is the shared folder that holds the
-# queue, running, failed and finished folders.
-# Use the full network path (\\server\share\...), not a mapped drive letter.
-# Use single quotes around Windows paths so the backslashes are kept as typed.
+# top_level_directory is the shared folder that holds the required_folders
+# required_folders are the folders necessary for the queue to run
 
-top_level_directory = '\\fileserver\worker_bees'
+top_level_directory = 'C:/worker_bees'
+required_folders = ['001_queue', '002_running', '003_failed', '004_complete']
