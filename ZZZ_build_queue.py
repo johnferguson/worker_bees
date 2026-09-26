@@ -1,17 +1,18 @@
 """Build the job queue from the schedule.
 
 Reads 000_worker_bees_queue.toml (settings) and 001_worker_bees_schedule.toml
-(the jobs), then makes sure the queue folder holds one .request file for
+(the jobs), then makes sure the queue folder holds one .sched file for
 every scheduled run from now until forward_days ahead.
 
 It is safe to run at any time, as often as you like:
   1. The whole schedule is checked first. If anything is wrong it stops
      before touching a single file.
   2. New and changed files are written.
-  3. Only then are old files deleted: future files made by this script
-     that are no longer in the schedule.
-Files due in the next few minutes, and files someone added by hand, are
-never touched.
+  3. Only then are old files deleted: future .sched files that are no
+     longer in the schedule.
+Files due in the next few minutes are never touched. Neither is anything
+that doesn't end in .sched, so jobs added by hand (e.g. .request files)
+are always left alone.
 
 Run it with:                                uv run ZZZ_build_queue.py
 See what it would do without changing anything:
@@ -29,7 +30,7 @@ CONFIG_FILE = HERE / "000_worker_bees_queue.toml"
 SCHEDULE_FILE = HERE / "001_worker_bees_schedule.toml"
 
 SAFETY_MINUTES = 10  # never touch files due sooner than this
-MARKER = "created_by: scheduler"  # line that marks files this script made
+SCHED_SUFFIX = ".sched"  # files this script makes; it ignores everything else
 
 DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 ORDINALS = {"1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5}
@@ -226,26 +227,20 @@ def wanted_files(jobs, today, forward_days, cutoff):
             for run_time in run_times(job, job["name"]):
                 start = datetime.combine(day, run_time)
                 if start > cutoff:
-                    name = f"{start:%Y%m%d_%H%M%S}_{job['name']}.request"
-                    wanted[name] = f"{job['script']}\n{MARKER}\n"
+                    name = f"{start:%Y%m%d_%H%M%S}_{job['name']}{SCHED_SUFFIX}"
+                    wanted[name] = f"{job['script']}\n"
     return wanted
 
 
-def future_queue_files(queue, cutoff):
-    """Return two things for files in the queue due after cutoff:
-    {filename: contents} for files this script made, and a set of all their names.
-    """
+def future_sched_files(queue, cutoff):
+    """Return {filename: contents} for the .sched files in the queue due after cutoff."""
     cutoff_text = f"{cutoff:%Y%m%d_%H%M%S}"
-    ours = {}
-    all_names = set()
-    for path in queue.glob("*.request"):
+    found = {}
+    for path in queue.glob(f"*{SCHED_SUFFIX}"):
         if path.name[:15] <= cutoff_text:
             continue  # due now or soon: a worker may be about to take it
-        all_names.add(path.name)
-        text = path.read_text(encoding="utf-8", errors="replace")
-        if MARKER in text.splitlines():
-            ours[path.name] = text
-    return ours, all_names
+        found[path.name] = path.read_text(encoding="utf-8", errors="replace")
+    return found
 
 
 def main():
@@ -262,28 +257,19 @@ def main():
     now = datetime.now()
     cutoff = now + timedelta(minutes=SAFETY_MINUTES)
     wanted = wanted_files(jobs, now.date(), forward_days, cutoff)
-    ours, all_names = future_queue_files(queue, cutoff)
+    existing = future_sched_files(queue, cutoff)
 
-    to_write = []
-    left_alone = []
-    for name in sorted(wanted):
-        if name in ours:
-            if ours[name] != wanted[name]:
-                to_write.append(name)  # changed, e.g. a new script path
-        elif name in all_names:
-            left_alone.append(name)  # someone put a file there by hand
-        else:
-            to_write.append(name)  # new
-    to_delete = sorted(set(ours) - set(wanted))
+    # new files, and files whose contents changed (e.g. a new script path)
+    to_write = [name for name in sorted(wanted) if existing.get(name) != wanted[name]]
+    # files for runs that are no longer in the schedule
+    to_delete = sorted(set(existing) - set(wanted))
 
     paused = sum(1 for job in jobs if not job.get("enabled", True))
     last_day = now.date() + timedelta(days=forward_days)
     print(f"Queue folder: {queue}")
     print(f"Schedule: {len(jobs)} job(s), {paused} paused. Building up to {last_day:%a %d %b %Y}.")
     print(f"{len(wanted)} run(s) wanted: {len(to_write)} to write, {len(to_delete)} to delete, "
-          f"{len(wanted) - len(to_write) - len(left_alone)} already in place.")
-    for name in left_alone:
-        print(f"  leave    {name}  (added by hand)")
+          f"{len(wanted) - len(to_write)} already in place.")
 
     if preview:
         for name in to_write:

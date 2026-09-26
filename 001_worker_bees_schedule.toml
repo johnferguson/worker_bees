@@ -1,7 +1,8 @@
 # worker_bees schedule
 #
 # One [[job]] section per job. ZZZ_build_queue.py turns these into
-# .request files in the queue folder.
+# .sched files in the queue folder. It only ever changes .sched files, so a
+# job added to the queue by hand should use another ending, e.g. .request
 #
 #   name      letters, numbers, _ and - only. Must be unique.
 #   script    the script to run. Relative paths start from the worker_bees folder.
