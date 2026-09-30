@@ -1,37 +1,29 @@
 """Check that the worker_bees folders exist.
 
 Reads top_level_directory and required_folders from
-000_worker_bees_queue.toml (in the same folder as this script) and checks
-that every required folder exists inside the top level directory.
+000_worker_bees_queue.toml and checks that every required folder exists
+inside the top level directory.
 
 Run it with:  uv run ZZZ_check_folders.py
 """
 
 import sys
-import tomllib
-from pathlib import Path
 
-CONFIG_FILE = Path(__file__).parent / "000_worker_bees_queue.toml"
+from worker_bees_settings import CONFIG_FILE, SettingsError, load_settings
 
 
 def main():
-    if not CONFIG_FILE.exists():
-        print(f"Config file not found: {CONFIG_FILE}")
-        return 1
-
-    # utf-8-sig copes with the invisible marker Notepad sometimes adds
     try:
-        settings = tomllib.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
-    except tomllib.TOMLDecodeError as error:
-        print(f"Could not read {CONFIG_FILE}: {error}")
+        settings = load_settings()
+    except SettingsError as error:
+        print(error)
         return 1
 
-    for name in ["top_level_directory", "required_folders"]:
-        if name not in settings:
-            print(f"{name} is not set in {CONFIG_FILE}")
-            return 1
+    if "required_folders" not in settings:
+        print(f"required_folders is not set in {CONFIG_FILE.name}")
+        return 1
 
-    top_dir = Path(settings["top_level_directory"])
+    top_dir = settings["top_dir"]
     print(f"Top level directory: {top_dir}")
 
     if not top_dir.is_dir():

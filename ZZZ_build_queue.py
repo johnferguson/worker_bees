@@ -21,13 +21,9 @@ See what it would do without changing anything:
 
 import re
 import sys
-import tomllib
 from datetime import date, datetime, timedelta
-from pathlib import Path
 
-HERE = Path(__file__).parent
-CONFIG_FILE = HERE / "000_worker_bees_queue.toml"
-SCHEDULE_FILE = HERE / "001_worker_bees_schedule.toml"
+from worker_bees_settings import CONFIG_FILE, SCHEDULE_FILE, SettingsError, folder, load_settings, load_toml
 
 SAFETY_MINUTES = 10  # never touch files due sooner than this
 SCHED_SUFFIX = ".sched"  # files this script makes; it ignores everything else
@@ -37,18 +33,8 @@ ORDINALS = {"1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5}
 JOB_SETTINGS = {"name", "script", "days", "times", "every_minutes", "between", "enabled"}
 
 
-class ScheduleError(Exception):
-    """A problem in the settings or schedule that someone needs to fix."""
-
-
-def load_toml(path):
-    if not path.exists():
-        raise ScheduleError(f"File not found: {path}")
-    try:
-        # utf-8-sig copes with the invisible marker Notepad sometimes adds
-        return tomllib.loads(path.read_text(encoding="utf-8-sig"))
-    except tomllib.TOMLDecodeError as error:
-        raise ScheduleError(f"Could not read {path.name}: {error}")
+class ScheduleError(SettingsError):
+    """A problem in the schedule that someone needs to fix."""
 
 
 # ---------------------------------------------------------------- day rules
@@ -151,18 +137,10 @@ def run_times(job, label):
 
 def read_settings(settings):
     """Return (queue folder, forward_days) from the settings file."""
-    for key in ["top_level_directory", "queue_folder", "forward_days"]:
-        if key not in settings:
-            raise ScheduleError(f"{key} is not set in {CONFIG_FILE.name}")
-
-    forward_days = settings["forward_days"]
+    forward_days = settings.get("forward_days")
     if not isinstance(forward_days, int) or forward_days < 0:
-        raise ScheduleError(f"forward_days in {CONFIG_FILE.name} should be a whole number like 7")
-
-    queue = Path(settings["top_level_directory"]) / settings["queue_folder"]
-    if not queue.is_dir():
-        raise ScheduleError(f"Queue folder not found: {queue}  (ZZZ_check_folders.py can help)")
-    return queue, forward_days
+        raise SettingsError(f"forward_days in {CONFIG_FILE.name} should be a whole number like 7")
+    return folder(settings, "queue_folder"), forward_days
 
 
 def check_job(job, label, names_seen):
@@ -248,9 +226,9 @@ def main():
 
     # 1. check everything before touching any files
     try:
-        queue, forward_days = read_settings(load_toml(CONFIG_FILE))
+        queue, forward_days = read_settings(load_settings())
         jobs = check_schedule(load_toml(SCHEDULE_FILE))
-    except ScheduleError as error:
+    except SettingsError as error:
         print(f"STOPPED - nothing was changed.\n{error}")
         return 1
 
