@@ -12,6 +12,18 @@ Notes on where this project is going.
 Everything below builds on that. None of it should make the core harder to
 understand.
 
+## Decisions
+
+- **The queue stays as one folder** (not a folder per day). Workers only look
+  in one place, jobs that were missed (e.g. a PC was off overnight) are still
+  the oldest files and get picked up next, and one-off jobs can be dropped in
+  without picking a day folder. The date at the front of each file name
+  already keeps them in time order.
+- **Finished jobs go into a folder per day** inside `003_failed` and
+  `004_complete` (e.g. `004_complete/2026-11-07/`). Those are the folders that
+  keep growing, and where you go to see what happened on a given day. See
+  plan 4.
+
 ## Rule for everything else: optional add-ons
 
 Each of the systems below is an add-on that you use only if you want it:
@@ -83,6 +95,9 @@ A standard way to keep the output of jobs.
       added to the end of its own job file, which then goes into the failed
       or complete folder.
 - [ ] Logs should be easy to read for people and for the monitor (plan 5).
+- [ ] File finished jobs into a folder per day, e.g. `004_complete/2026-11-07/`
+      and `003_failed/2026-11-07/`, so these folders stay small and easy to
+      browse. Only the step that files a finished job changes.
 
 ### 5. Monitoring
 
