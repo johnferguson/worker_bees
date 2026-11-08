@@ -58,9 +58,11 @@ worker needs:
 
 Open questions:
 
-- How do the PCs reach the queue folder on the Unix server? Windows workers
-  need it shared with Samba (SMB). Linux and WSL workers need it mounted
-  (Samba or NFS), since WSL can't use a `\\server\share` path directly.
+- Samba is already set up on the Unix server, so Windows workers can reach
+  the queue folder with a `//server/share` path. (Use that, not a mapped
+  drive letter: Task Scheduler often runs with no one logged in, and
+  drive letters don't exist then.) Linux and WSL workers still need it
+  mounted, since WSL can't use a `\\server\share` path directly.
 - Which account do the workers use on the server? It needs to read, write,
   rename and delete files in all four folders.
 - Should the Unix server run a worker too? It's always on, so it's a good
