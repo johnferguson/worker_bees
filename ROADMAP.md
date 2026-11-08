@@ -14,15 +14,15 @@ understand.
 
 ## Decisions
 
-- **The queue stays as one folder** (not a folder per day). Workers only look
-  in one place, jobs that were missed (e.g. a PC was off overnight) are still
-  the oldest files and get picked up next, and one-off jobs can be dropped in
-  without picking a day folder. The date at the front of each file name
-  already keeps them in time order.
-- **Finished jobs go into a folder per day** inside `003_failed` and
-  `004_complete` (e.g. `004_complete/2026-11-07/`). Those are the folders that
-  keep growing, and where you go to see what happened on a given day. See
-  plan 4.
+- **One folder each, no folders per day.** This goes for the queue and for
+  the failed and complete folders. Workers only look in one place, jobs that
+  were missed (e.g. a PC was off overnight) are still the oldest files and
+  get picked up next, and one-off jobs can be dropped in without picking a
+  day folder. The date at the front of each file name already keeps them in
+  time order.
+- **A job's log lives in its own job file.** Whatever the script prints goes
+  into the job file, so the file is the job's whole record: the script it
+  ran, when, on which worker, and what happened. See plan 4.
 
 ## Rule for everything else: optional add-ons
 
@@ -89,15 +89,19 @@ this check.
 
 ### 4. Logging
 
-A standard way to keep the output of jobs.
+Each job's log goes into its own job file. Jobs don't need to do anything
+special: whatever a script prints is logged.
 
-- [ ] Decide what gets logged and where. At the moment each job's output is
-      added to the end of its own job file, which then goes into the failed
-      or complete folder.
+Already working: the worker collects everything the script prints and adds
+it to the end of the job file when the script finishes.
+
+- [ ] Write the output into the job file line by line while the script runs,
+      not all at once at the end. Then you can open a running job's file (or
+      the monitor can) and see how far it has got, and if a PC stops
+      mid-job, the output up to that point is kept.
+- [ ] Put the time at the start of each line, so you can see how long each
+      step took.
 - [ ] Logs should be easy to read for people and for the monitor (plan 5).
-- [ ] File finished jobs into a folder per day, e.g. `004_complete/2026-11-07/`
-      and `003_failed/2026-11-07/`, so these folders stay small and easy to
-      browse. Only the step that files a finished job changes.
 
 ### 5. Monitoring
 
