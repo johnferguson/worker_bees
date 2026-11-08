@@ -20,6 +20,12 @@ understand.
   get picked up next, and one-off jobs can be dropped in without picking a
   day folder. The date at the front of each file name already keeps them in
   time order.
+- **The shared queue folder is not on SharePoint (or OneDrive).** Sync tools
+  cause too many problems, and the queue depends on a job file only being
+  movable by one worker at a time. A sync tool can't promise that: two PCs
+  can both "move" the same file before they sync, and the job runs twice.
+  The queue goes on a shared network folder instead (where exactly is still
+  to decide). Jobs can still use SharePoint for their own files.
 - **A job's log lives in its own job file.** Whatever the script prints goes
   into the job file, so the file is the job's whole record: the script it
   ran, when, on which worker, and what happened. See plan 4.
@@ -42,7 +48,8 @@ quick, repeatable setup, probably built around uv, that covers everything a
 worker needs:
 
 - [ ] Python and every job's packages (uv can handle this)
-- [ ] The SharePoint sync, so the machine can see the shared queue folder
+- [ ] Access to the shared queue folder on the network
+- [ ] Any SharePoint syncs that this machine's jobs need (see plan 2)
 - [ ] The worker_bees folder itself, with the right settings for this machine
 - [ ] The Task Scheduler task (or cron on WSL) that starts the worker every
       few minutes
@@ -51,8 +58,12 @@ worker needs:
 
 Open questions:
 
-- Can the SharePoint sync be scripted, or does it need a short manual
-  checklist? It's set up through OneDrive, which is hard to automate.
+- Where does the shared queue folder live: a file server, a NAS, or a
+  shared folder on one of the PCs? Workers under WSL need it mounted, since
+  WSL can't use a `\\server\share` path directly.
+- For jobs that need SharePoint files: can those syncs be scripted, or do
+  they need a short manual checklist? They're set up through OneDrive,
+  which is hard to automate.
 - What differs from one machine to the next? That decides what the setup
   has to ask for, and what can be filled in automatically.
 
