@@ -65,8 +65,10 @@ Open questions:
   mounted, since WSL can't use a `\\server\share` path directly.
 - Which account do the workers use on the server? It needs to read, write,
   rename and delete files in all four folders.
-- Should the Unix server run a worker too? It's always on, so it's a good
-  home for the nightly queue build.
+- The Unix server only holds the files. It has no Python, so it doesn't run
+  a worker. The nightly queue build runs as an ordinary job on whichever
+  PC worker picks it up, and `forward_days` (7) keeps the queue going if
+  it's missed for a few nights.
 - For jobs that need SharePoint files: can those syncs be scripted, or do
   they need a short manual checklist? They're set up through OneDrive,
   which is hard to automate.
