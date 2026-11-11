@@ -10,7 +10,7 @@ from pathlib import Path
 
 HERE = Path(__file__).parent  # the worker_bees folder
 CONFIG_FILE = HERE / "000_worker_bees_queue.toml"
-SCHEDULE_FILE = HERE / "001_worker_bees_schedule.toml"
+SCHEDULE_FILE = HERE / "001_worker_bees_crontab.txt"
 
 
 class SettingsError(Exception):

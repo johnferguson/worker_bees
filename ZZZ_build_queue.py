@@ -1,8 +1,9 @@
 """Build the job queue from the schedule.
 
-Reads 000_worker_bees_queue.toml (settings) and 001_worker_bees_schedule.toml
-(the jobs), then makes sure the queue folder holds one .sched file for
-every scheduled run from now until forward_days ahead.
+Reads 000_worker_bees_queue.toml (settings) and 001_worker_bees_crontab.txt
+(the jobs, one per line like a crontab), then makes sure the queue folder
+holds one .sched file for every scheduled run from now until forward_days
+ahead.
 
 It is safe to run at any time, as often as you like:
   1. The whole schedule is checked first. If anything is wrong it stops
@@ -21,115 +22,120 @@ See what it would do without changing anything:
 
 import re
 import sys
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
+from pathlib import Path
 
-from worker_bees_settings import CONFIG_FILE, SCHEDULE_FILE, SettingsError, folder, load_settings, load_toml
+from worker_bees_settings import CONFIG_FILE, SCHEDULE_FILE, SettingsError, folder, load_settings
 
 SAFETY_MINUTES = 10  # never touch files due sooner than this
 SCHED_SUFFIX = ".sched"  # files this script makes; it ignores everything else
 
-DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-ORDINALS = {"1st": 1, "2nd": 2, "3rd": 3, "4th": 4, "5th": 5}
-JOB_SETTINGS = {"name", "script", "days", "times", "every_minutes", "between", "enabled"}
+MONTH_NAMES = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+
+# the five time fields of a crontab line: name, lowest, highest, names allowed
+FIELDS = [
+    ("minute", 0, 59, None),
+    ("hour", 0, 23, None),
+    ("day of month", 1, 31, None),
+    ("month", 1, 12, MONTH_NAMES),  # jan = 1
+    ("day of week", 0, 7, DAY_NAMES),  # sun = 0, and 7 is Sunday too
+]
 
 
 class ScheduleError(SettingsError):
     """A problem in the schedule that someone needs to fix."""
 
 
-# ---------------------------------------------------------------- day rules
+# ------------------------------------------------------- reading a crontab line
 
 
-def expand_days(rule):
-    """'mon-fri' -> ['mon', 'tue', 'wed', 'thu', 'fri'],  'mon,wed' -> ['mon', 'wed']"""
-    names = []
-    for part in rule.split(","):
-        if "-" in part:
-            first, last = part.split("-", 1)
-        else:
-            first = last = part
-        if first not in DAY_NAMES or last not in DAY_NAMES:
-            raise ScheduleError(f"days = '{rule}' has a day name that isn't one of {', '.join(DAY_NAMES)}")
-        if DAY_NAMES.index(first) > DAY_NAMES.index(last):
-            raise ScheduleError(f"days = '{rule}' should go forwards, e.g. mon-fri not fri-mon")
-        names += DAY_NAMES[DAY_NAMES.index(first) : DAY_NAMES.index(last) + 1]
-    return names
+def to_number(text, field):
+    """'5' -> 5, and for month and day of week a name too: 'mar' -> 3, 'tue' -> 2."""
+    name, low, high, names = field
+    if text.isdigit():
+        return int(text)
+    if names and text in names:
+        return names.index(text) + low
+    raise ScheduleError(f"{name}: '{text}' is not a number from {low} to {high}")
 
 
-def day_matches(day, rule):
-    """Return True if the date `day` fits the days rule, e.g. 'mon-fri' or '2nd tue'.
+def parse_field(text, field):
+    """Return the set of numbers a field allows, e.g. '*/15' as a minute -> {0, 15, 30, 45}.
 
-    Raises ScheduleError if the rule isn't understood.
+    A field is a comma separated list of parts. Each part is * (every value),
+    a number, or a range like 1-5, and can end in /step: */15, 8-18/2.
     """
-    rule = " ".join(rule.lower().split())  # tidy case and spacing
-    rule = re.sub(r" ?([,-]) ?", r"\1", rule)  # 'mon, wed' -> 'mon,wed'
-    weekday = DAY_NAMES[day.weekday()]
+    name, low, high, _ = field
+    values = set()
+    for part in text.lower().split(","):
+        base, has_step, step_text = part.partition("/")
+        step = 1
+        if has_step:
+            if not step_text.isdigit() or int(step_text) == 0:
+                raise ScheduleError(f"{name}: '{part}' needs a whole number after the /, like */15")
+            step = int(step_text)
+        if base == "*":
+            first, last = low, high
+        elif "-" in base:
+            first_text, last_text = base.split("-", 1)
+            first, last = to_number(first_text, field), to_number(last_text, field)
+        else:
+            first = to_number(base, field)
+            last = high if has_step else first  # 5/10 means 5, 15, 25 ...
+        if not low <= first <= last <= high:
+            raise ScheduleError(f"{name}: '{part}' should be within {low}-{high}, low to high")
+        values.update(range(first, last + 1, step))
+    return values
 
-    if rule == "daily":
-        return True
 
-    if rule == "last day":
-        # tomorrow is in a different month
-        return (day + timedelta(days=1)).month != day.month
+def job_name(script):
+    """The name a job gets in the queue: the script's file name, e.g. jobs/ftp_upload.py -> ftp_upload."""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", Path(script).stem) or "job"
 
-    if rule.startswith("day "):
+
+def parse_line(line, label):
+    """Turn one crontab line into a job, a dict of the allowed values for each field."""
+    parts = line.split(None, 5)
+    if len(parts) < 6:
+        raise ScheduleError(f"{label}: should be five time fields and then the script, "
+                            f"like  0 8 * * 1-5  jobs/report.py")
+    day_of_month, day_of_week, script = parts[2], parts[4], parts[5]
+    sets = []
+    for text, field in zip(parts[:5], FIELDS):
         try:
-            numbers = [int(n) for n in rule[4:].split(",")]
-        except ValueError:
-            numbers = []
-        if not numbers or not all(1 <= n <= 31 for n in numbers):
-            raise ScheduleError(f"days = '{rule}' should look like 'day 1' or 'day 1,15'")
-        return day.day in numbers
-
-    words = rule.split(" ")
-    if len(words) == 2:  # '2nd tue', 'last fri'
-        which, name = words
-        if name not in DAY_NAMES or (which != "last" and which not in ORDINALS):
-            raise ScheduleError(f"days = '{rule}' should look like '2nd tue' or 'last fri'")
-        if weekday != name:
-            return False
-        if which == "last":
-            # a week from now is in a different month
-            return (day + timedelta(days=7)).month != day.month
-        # days 1-7 hold the 1st of each weekday, days 8-14 the 2nd, and so on
-        return (day.day - 1) // 7 + 1 == ORDINALS[which]
-
-    return weekday in expand_days(rule)
+            sets.append(parse_field(text, field))
+        except ScheduleError as error:
+            raise ScheduleError(f"{label}: {error}")
+    days_of_week = {7 if d == 0 else d for d in sets[4]}  # one number for Sunday
+    return {
+        "script": script.strip(),
+        "name": job_name(script.strip()),
+        "minutes": sorted(sets[0]),
+        "hours": sorted(sets[1]),
+        "days_of_month": sets[2],
+        "months": sets[3],
+        "days_of_week": days_of_week,
+        # a day field starting with * (even */2) switches off the either-one rule in day_matches
+        "any_day_of_month": day_of_month.startswith("*"),
+        "any_day_of_week": day_of_week.startswith("*"),
+    }
 
 
-# ------------------------------------------------------------------- times
+def day_matches(day, job):
+    """Return True if the job runs on the date `day`.
 
-
-def parse_time(text, label):
-    try:
-        return datetime.strptime(text, "%H:%M").time()
-    except (TypeError, ValueError):
-        raise ScheduleError(f"{label}: '{text}' is not a time like '08:00'")
-
-
-def run_times(job, label):
-    """Return every time of day the job runs, from 'times' or 'every_minutes' + 'between'."""
-    if "times" in job:
-        if not isinstance(job["times"], list) or not job["times"]:
-            raise ScheduleError(f'{label}: times should be a list like ["08:00", "13:00"]')
-        return [parse_time(text, label) for text in job["times"]]
-
-    step = job["every_minutes"]
-    between = job.get("between")
-    if not isinstance(step, int) or step < 1:
-        raise ScheduleError(f"{label}: every_minutes should be a whole number like 30")
-    if not isinstance(between, list) or len(between) != 2:
-        raise ScheduleError(f'{label}: between should look like ["07:00", "18:00"]')
-
-    start = datetime.combine(date.today(), parse_time(between[0], label))
-    end = datetime.combine(date.today(), parse_time(between[1], label))
-    if start > end:
-        raise ScheduleError(f"{label}: between should go from earlier to later")
-    times = []
-    while start <= end:
-        times.append(start.time())
-        start += timedelta(minutes=step)
-    return times
+    The cron rule: if both day of month and day of week are set (neither
+    starts with *), a day matching EITHER one is enough. Otherwise it has to
+    match both (a plain * matches every day anyway).
+    """
+    if day.month not in job["months"]:
+        return False
+    by_month_day = day.day in job["days_of_month"]
+    by_week_day = day.isoweekday() in job["days_of_week"]  # Monday 1 ... Sunday 7
+    if job["any_day_of_month"] or job["any_day_of_week"]:
+        return by_month_day and by_week_day
+    return by_month_day or by_week_day
 
 
 # ------------------------------------------------------ checking the files
@@ -143,51 +149,28 @@ def read_settings(settings):
     return folder(settings, "queue_folder"), forward_days
 
 
-def check_job(job, label, names_seen):
-    """Raise ScheduleError if anything about this job is wrong."""
-    unknown = set(job) - JOB_SETTINGS
-    if unknown:
-        raise ScheduleError(f"{label}: unknown setting(s): {', '.join(sorted(unknown))}")
-    for key in ["name", "script", "days"]:
-        if not isinstance(job.get(key), str) or not job[key].strip():
-            raise ScheduleError(f"{label}: {key} is missing (it should be text in quotes)")
+def read_schedule(path):
+    """Check every line of the schedule and return the jobs. Reports all problems at once."""
+    if not path.exists():
+        raise ScheduleError(f"File not found: {path}")
+    # utf-8-sig copes with the invisible marker Notepad sometimes adds
+    lines = path.read_text(encoding="utf-8-sig").splitlines()
 
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", job["name"]):
-        raise ScheduleError(f"{label}: name can only use letters, numbers, _ and -")
-    if job["name"] in names_seen:
-        raise ScheduleError(f"{label}: there is already a job called {job['name']}")
-    names_seen.add(job["name"])
-
-    if ("times" in job) == ("every_minutes" in job):
-        raise ScheduleError(f"{label}: needs either times or every_minutes (not both)")
-    if not isinstance(job.get("enabled", True), bool):
-        raise ScheduleError(f"{label}: enabled should be true or false")
-
-    try:
-        day_matches(date.today(), job["days"])  # raises if the rule isn't understood
-    except ScheduleError as error:
-        raise ScheduleError(f"{label}: {error}")
-    run_times(job, label)  # raises if the times are wrong
-
-
-def check_schedule(schedule):
-    """Check every job and return the list of jobs. Reports all problems at once."""
-    jobs = schedule.get("job", [])
-    if not isinstance(jobs, list) or not jobs:
-        # an empty schedule would delete every future job, so treat it as a mistake
-        raise ScheduleError(f"No [[job]] sections found in {SCHEDULE_FILE.name}")
-
-    problems = []
-    names_seen = set()
-    for number, job in enumerate(jobs, start=1):
-        label = f"job {number} ({job.get('name', 'no name')})"
+    jobs, problems = [], []
+    for number, line in enumerate(lines, start=1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
         try:
-            check_job(job, label, names_seen)
+            jobs.append(parse_line(line, f"line {number}"))
         except ScheduleError as error:
             problems.append(str(error))
 
     if problems:
-        raise ScheduleError(f"Problems in {SCHEDULE_FILE.name}:\n" + "\n".join(f"  - {p}" for p in problems))
+        raise ScheduleError(f"Problems in {path.name}:\n" + "\n".join(f"  - {p}" for p in problems))
+    if not jobs:
+        # an empty schedule would delete every future job, so treat it as a mistake
+        raise ScheduleError(f"No jobs found in {path.name}")
     return jobs
 
 
@@ -200,13 +183,20 @@ def wanted_files(jobs, today, forward_days, cutoff):
     for offset in range(forward_days + 1):
         day = today + timedelta(days=offset)
         for job in jobs:
-            if not job.get("enabled", True) or not day_matches(day, job["days"]):
+            if not day_matches(day, job):
                 continue
-            for run_time in run_times(job, job["name"]):
-                start = datetime.combine(day, run_time)
-                if start > cutoff:
+            for hour in job["hours"]:
+                for minute in job["minutes"]:
+                    start = datetime(day.year, day.month, day.day, hour, minute)
+                    if start <= cutoff:
+                        continue
                     name = f"{start:%Y%m%d_%H%M%S}_{job['name']}{SCHED_SUFFIX}"
-                    wanted[name] = f"{job['script']}\n"
+                    contents = f"{job['script']}\n"
+                    if wanted.get(name, contents) != contents:
+                        raise ScheduleError(
+                            f"Two different scripts called {job['name']} both run at {start:%Y-%m-%d %H:%M}. "
+                            f"Rename one of them: the queue tells jobs apart by script name and time.")
+                    wanted[name] = contents
     return wanted
 
 
@@ -225,16 +215,16 @@ def main():
     preview = "--preview" in sys.argv[1:]
 
     # 1. check everything before touching any files
+    now = datetime.now()
+    cutoff = now + timedelta(minutes=SAFETY_MINUTES)
     try:
         queue, forward_days = read_settings(load_settings())
-        jobs = check_schedule(load_toml(SCHEDULE_FILE))
+        jobs = read_schedule(SCHEDULE_FILE)
+        wanted = wanted_files(jobs, now.date(), forward_days, cutoff)
     except SettingsError as error:
         print(f"STOPPED - nothing was changed.\n{error}")
         return 1
 
-    now = datetime.now()
-    cutoff = now + timedelta(minutes=SAFETY_MINUTES)
-    wanted = wanted_files(jobs, now.date(), forward_days, cutoff)
     existing = future_sched_files(queue, cutoff)
 
     # new files, and files whose contents changed (e.g. a new script path)
@@ -242,10 +232,9 @@ def main():
     # files for runs that are no longer in the schedule
     to_delete = sorted(set(existing) - set(wanted))
 
-    paused = sum(1 for job in jobs if not job.get("enabled", True))
     last_day = now.date() + timedelta(days=forward_days)
     print(f"Queue folder: {queue}")
-    print(f"Schedule: {len(jobs)} job(s), {paused} paused. Building up to {last_day:%a %d %b %Y}.")
+    print(f"Schedule: {len(jobs)} job(s). Building up to {last_day:%a %d %b %Y}.")
     print(f"{len(wanted)} run(s) wanted: {len(to_write)} to write, {len(to_delete)} to delete, "
           f"{len(wanted) - len(to_write)} already in place.")
 

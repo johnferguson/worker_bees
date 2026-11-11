@@ -35,7 +35,7 @@ top_level_directory/
 | File | What it is |
 |---|---|
 | `000_worker_bees_queue.toml` | This machine's settings: where the queue folders and job scripts are, how far ahead to build, job timeout |
-| `001_worker_bees_schedule.toml` | The scheduled jobs. The top of the file explains the options |
+| `001_worker_bees_crontab.txt` | The scheduled jobs, one per line like a crontab. The top of the file explains the format |
 | `ZZZ_check_folders.py` | Checks the folders exist |
 | `ZZZ_build_queue.py` | Writes the `.sched` files from the schedule. `--preview` shows what it would do |
 | `ZZZ_worker.py` | The worker. Runs due jobs until none are left, then exits |
@@ -49,8 +49,14 @@ top_level_directory/
 2. Set `top_level_directory` in `000_worker_bees_queue.toml`, and create the
    four folders there. Set `scripts_directory` to the folder holding your job
    scripts. `uv run ZZZ_check_folders.py` checks them.
-3. Put your jobs in `001_worker_bees_schedule.toml`, check them with
-   `uv run ZZZ_build_queue.py --preview`, then run `uv run ZZZ_build_queue.py`.
+3. Put your jobs in `001_worker_bees_crontab.txt`, one per line like a
+   crontab, check them with `uv run ZZZ_build_queue.py --preview`, then run
+   `uv run ZZZ_build_queue.py`:
+
+   ```
+   # minute hour day-of-month month day-of-week  script
+   0 8,13 * * 1-5   jobs/ftp_upload.py
+   ```
 4. Start a worker every few minutes on each machine (below).
 
 ### Accounts and logins
