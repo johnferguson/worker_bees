@@ -43,7 +43,8 @@ top_level_directory/
 
 ## Setting up
 
-1. Install [uv](https://docs.astral.sh/uv/). It installs Python and each
+1. Set up the accounts (below). Then, logged in as the worker account,
+   install [uv](https://docs.astral.sh/uv/). It installs Python and each
    script's packages, without admin rights.
 2. Set `top_level_directory` in `000_worker_bees_queue.toml`, and create the
    four folders there. Set `scripts_directory` to the folder holding your job
@@ -52,12 +53,72 @@ top_level_directory/
    `uv run ZZZ_build_queue.py --preview`, then run `uv run ZZZ_build_queue.py`.
 4. Start a worker every few minutes on each machine (below).
 
+### Accounts and logins
+
+Workers use two accounts, both called `worker_bees`. Neither one's password
+goes in any worker_bees file.
+
+**On the Unix server**, an account that can only reach the queue share.
+As root, make a user that can't log in to the server itself, give it the
+queue folder, and set its Samba password:
+
+```
+useradd -s /usr/bin/false worker_bees
+chown -R worker_bees /path/to/queue/folder
+smbpasswd -a worker_bees
+```
+
+Then limit the share to it in `smb.conf`:
+
+```
+[worker_bees]
+   path = /path/to/queue/folder
+   valid users = worker_bees
+   read only = no
+```
+
+**On each Windows worker PC**, a standard (not administrator) local account
+for the worker to run as. In a Command Prompt run as administrator:
+
+```
+net user worker_bees * /add
+```
+
+Then store the server login in that account's Credential Manager. Windows
+keeps it encrypted, readable only by that account, and uses it whenever
+`//server/worker_bees` is opened:
+
+```
+runas /profile /user:worker_bees cmd
+```
+
+and in the window that opens:
+
+```
+cmdkey /add:server /user:worker_bees /pass
+```
+
+(`/pass` with nothing after it asks for the password, so it isn't saved in
+the command history.) The `worker_bees` folder must be readable by this
+account.
+
+If the Unix server is joined to the Windows domain, use a domain account
+for the worker instead and skip `cmdkey`: the server takes its Windows login.
+
+**Jobs that need a password of their own** should read it with the
+[`keyring`](https://pypi.org/project/keyring/) package, which uses Credential
+Manager on Windows. Don't print it: the job's output is written into the job
+file on the share.
+
 ### Windows: Task Scheduler
 
 Create a task with:
 
-- **Program:** the full path to `uv.exe` (`where uv` shows it, usually
-  `C:\Users\<you>\.local\bin\uv.exe`)
+- **Run as:** the `worker_bees` account, with "Run whether user is logged on
+  or not". Leave "Do not store password" unticked, or the task can't use the
+  login saved with `cmdkey`.
+- **Program:** the full path to `uv.exe` (`where uv`, as the worker account,
+  shows it, usually `C:\Users\worker_bees\.local\bin\uv.exe`)
 - **Arguments:** `run ZZZ_worker.py`
 - **Start in:** this folder
 - **Trigger:** Daily, repeat every 5 minutes, for a duration of Indefinitely
@@ -65,8 +126,27 @@ Create a task with:
 
 ### WSL: cron
 
-Set `top_level_directory_linux` in the settings file (`C:/` is `/mnt/c/` in
-WSL), then add this with `crontab -e`, changing the folder:
+WSL can't open `//server/...` paths, so mount the share. Put the login in a
+file only root can read, `/etc/worker_bees.cred`:
+
+```
+username=worker_bees
+password=...
+```
+
+```
+sudo chmod 600 /etc/worker_bees.cred
+```
+
+and add this line to `/etc/fstab` (needs `sudo apt install cifs-utils`):
+
+```
+//server/worker_bees /mnt/worker_bees cifs credentials=/etc/worker_bees.cred,uid=YOUR_WSL_USER,iocharset=utf8 0 0
+```
+
+Set `top_level_directory_linux` (and `scripts_directory_linux`) in the
+settings file to paths under `/mnt/worker_bees`, then add this with
+`crontab -e`, changing the folder:
 
 ```
 */5 * * * * cd /mnt/c/path/to/worker_bees && $HOME/.local/bin/uv run ZZZ_worker.py >> $HOME/worker_bees.log 2>&1

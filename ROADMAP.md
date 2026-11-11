@@ -29,6 +29,20 @@ understand.
 - **A job's log lives in its own job file.** Whatever the script prints goes
   into the job file, so the file is the job's whole record: the script it
   ran, when, on which worker, and what happened. See plan 4.
+- **Workers run under their own Windows account.** Each worker PC has a
+  local `worker_bees` account, and the Task Scheduler task runs as it, not
+  as whoever uses the PC. Its logins are kept in that account's own Windows
+  Credential Manager, so people and programs (AI agents included) running
+  under other accounts on the PC can't read them.
+- **The server login can only reach the queue.** Workers log in to the
+  Samba share with a `worker_bees` account on the server that can read and
+  write the queue share and nothing else. If its password is ever found,
+  the damage stays small.
+- **Logins never go in worker_bees' own files.** Not in the settings file,
+  the schedule, anything in git, a job file (whatever a script prints ends
+  up there, on the share) or an environment variable (every job gets the
+  worker's). They go in the places built for them: Windows Credential
+  Manager, a root-only credentials file on Linux and WSL, keys in `~/.ssh`.
 
 ## Rule for everything else: optional add-ons
 
@@ -63,8 +77,9 @@ Open questions:
   drive letter: Task Scheduler often runs with no one logged in, and
   drive letters don't exist then.) Linux and WSL workers still need it
   mounted, since WSL can't use a `\\server\share` path directly.
-- Which account do the workers use on the server? It needs to read, write,
-  rename and delete files in all four folders.
+- Is the Unix server joined to the Windows domain? If it is, the worker
+  account can be a domain account and the server takes its Windows login,
+  so no password has to be stored on the PCs at all.
 - The Unix server only holds the files. It has no Python, so it doesn't run
   a worker. The nightly queue build runs as an ordinary job on whichever
   PC worker picks it up, and `forward_days` (7) keeps the queue going if
@@ -83,6 +98,9 @@ run:
 - [ ] Which syncs it needs (e.g. a SharePoint library)
 - [ ] Which Python libraries it needs
 - [ ] Anything else it relies on (network drives, programs, logins)
+- [ ] SSH access to a server, for jobs that need it. Each worker gets its own
+      key instead of a password, and the server limits what that key can do,
+      so one PC's key can be removed without touching the others.
 
 The job scripts don't change. If a job isn't in the table, it just runs as it
 does now.
