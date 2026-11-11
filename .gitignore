@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+# the schedule editor's backup and half-written files
+*.bak
+*.saving

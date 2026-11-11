@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>worker_bees stand</title>
+<style>
+  :root {
+    --bg: #fbf8f1; --panel: #ffffff; --ink: #2b2620; --muted: #776d60; --line: #e7dfd0;
+    --honey: #f2a900; --honey-soft: #fff1c9; --bad: #c2412d; --bad-soft: #fde7e2; --good: #2f7d4f; --good-soft: #e3f4e8;
+    --sky-top: #9fd8ff; --sky-bottom: #e9f7ff; --hill-back: #b9e48f; --hill-front: #93d06a; --grass: #8fcb62;
+    --road: #8d8580; --road-edge: #6f6863; --cloud: #ffffff; --window: #d7efff; --flower: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1915; --panel: #25221d; --ink: #f1ebe0; --muted: #a99f90; --line: #3a352d;
+      --honey: #f5b82e; --honey-soft: #3d3218; --bad: #ff8a73; --bad-soft: #3d221d; --good: #7fd19f; --good-soft: #1f3326;
+      --sky-top: #101a3a; --sky-bottom: #2d3f74; --hill-back: #2f5434; --hill-front: #2a4a2d; --grass: #34603a;
+      --road: #45424a; --road-edge: #333038; --cloud: #5b6894; --window: #ffd76a; --flower: #f6e7a9;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; padding: 16px 20px 8px; }
+  h1 { margin: 0; font-size: 22px; }
+  h1 span { color: var(--honey); }
+  .sub { color: var(--muted); font-size: 13px; }
+  .wrap { padding: 0 20px 28px; }
+  @media (max-width: 640px) { .wrap { padding: 0 10px 20px; } header { padding: 12px 12px 6px; } }
+  .scene { width: 100%; height: auto; display: block; border-radius: 18px; border: 1px solid var(--line); background: var(--sky-bottom); }
+  .banner { margin: 0 0 12px; padding: 10px 14px; border-radius: 10px; background: var(--bad-soft); color: var(--bad); display: none; }
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .panel h2 { margin: 0 0 6px; font-size: 15px; }
+  .panel ul { list-style: none; margin: 0; padding: 0; }
+  .panel li { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; padding: 4px 0; border-top: 1px dashed var(--line); font-size: 14px; }
+  .panel li:first-child { border-top: 0; }
+  .panel .t { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 64px; }
+  .panel .n { font-weight: 600; overflow-wrap: anywhere; flex: 1 1 8em; }
+  .panel .x { font-size: 12.5px; color: var(--muted); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; align-self: center; }
+  .warn { color: var(--bad); }
+  .ok { color: var(--good); }
+  .none { color: var(--muted); font-size: 14px; }
+
+  /* ---- the scene ---- */
+  .day-only, .night-only { display: inline; }
+  .night-only { display: none; }
+  @media (prefers-color-scheme: dark) { .day-only { display: none; } .night-only { display: inline; } }
+  .ink { stroke: #2b1d00; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .sun-rays { transform-box: fill-box; transform-origin: center; animation: spin 40s linear infinite; }
+  .star { animation: twinkle 3s ease-in-out infinite; }
+  .cloud { animation: drift linear infinite; }
+  .steam path { animation: steam 2.6s ease-in-out infinite; opacity: 0; }
+  .steam path:nth-child(2) { animation-delay: .8s; } .steam path:nth-child(3) { animation-delay: 1.6s; }
+  .wave { transform-box: fill-box; transform-origin: 0% 100%; animation: wave 1.6s ease-in-out infinite; }
+  .chef { animation: bob 2.2s ease-in-out infinite; }
+
+  .bee { transition: transform 3s cubic-bezier(.45, .05, .35, 1); }
+  .bee.instant { transition: none; }
+  .bee .bounce { animation: bounce .55s ease-in-out infinite; }
+  .bee .face { transition: transform .4s; }
+  .bee.left .face { transform: scaleX(-1); }
+  .bee .wings { transform-box: fill-box; transform-origin: 70% 100%; animation: flap .16s ease-in-out infinite alternate; }
+  .bee .antennae { transform-box: fill-box; transform-origin: 50% 100%; animation: wiggle 1.4s ease-in-out infinite; }
+  .bee .spokes { transform-box: fill-box; transform-origin: center; }
+  .bee.moving .spokes { animation: spin .35s linear infinite; }
+  .bee.moving .bounce { animation-duration: .3s; }
+  .bee .puffs circle { opacity: 0; transform-box: fill-box; transform-origin: center; }
+  .bee.moving .puffs circle, .bee.busy .puffs circle { animation: puff 1.2s ease-out infinite; }
+  .bee .puffs circle:nth-child(2) { animation-delay: .4s; } .bee .puffs circle:nth-child(3) { animation-delay: .8s; }
+  .bee .bubble { transform-box: fill-box; transform-origin: 0% 100%; animation: pop .5s cubic-bezier(.3, 1.6, .5, 1) both; }
+
+  .house { transition: transform .8s; }
+  .house .pop { transform-box: fill-box; transform-origin: 50% 100%; animation: pop .7s cubic-bezier(.3, 1.6, .5, 1) both; }
+  .house.leaving { opacity: 0; transition: opacity .6s; }
+  .house .glow { opacity: 0; transition: opacity .6s; }
+  .house.running .glow { opacity: 1; }
+  .hearts use { opacity: 0; animation: float 3s ease-out infinite; }
+  .hearts g:nth-child(2) use { animation-delay: 1s; } .hearts g:nth-child(3) use { animation-delay: 2s; }
+  .rain line { animation: rain 1s linear infinite; }
+  .rain line:nth-child(2) { animation-delay: .33s; } .rain line:nth-child(3) { animation-delay: .66s; }
+  .flag { transform-box: fill-box; transform-origin: 0% 100%; animation: wave 2s ease-in-out infinite; }
+  .order { transform-box: fill-box; transform-origin: 50% 100%; animation: pop .5s cubic-bezier(.3, 1.6, .5, 1) both; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes twinkle { 50% { opacity: .25; } }
+  @keyframes drift { from { transform: translateX(-260px); } to { transform: translateX(1460px); } }
+  @keyframes steam { 0% { opacity: 0; transform: translateY(6px); } 30% { opacity: .8; } 100% { opacity: 0; transform: translateY(-26px); } }
+  @keyframes wave { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(14deg); } }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+  @keyframes flap { from { transform: scaleY(1); } to { transform: scaleY(.55); } }
+  @keyframes wiggle { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+  @keyframes puff { 0% { opacity: .7; transform: translate(0, 0) scale(.6); } 100% { opacity: 0; transform: translate(-22px, -10px) scale(1.6); } }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  @keyframes float { 0% { opacity: 0; transform: translateY(0) scale(.6); } 20% { opacity: 1; } 100% { opacity: 0; transform: translateY(-40px) scale(1.1); } }
+  @keyframes rain { from { transform: translateY(-4px); opacity: 1; } to { transform: translateY(14px); opacity: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: .01s !important; }
+    .steam path, .hearts use { opacity: .7; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>&#9679;</span> worker_bees stand</h1>
+  <span class="sub" id="status">Looking at the queue...</span>
+</header>
+<div class="wrap">
+  <div class="banner" id="banner"></div>
+  <svg class="scene" id="scene" viewBox="0 0 1200 680" role="img" aria-labelledby="scene-title">
+    <title id="scene-title">The banh mi stand: bees on mopeds deliver to houses</title>
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" style="stop-color: var(--sky-top)"/><stop offset="1" style="stop-color: var(--sky-bottom)"/>
+      </linearGradient>
+      <clipPath id="bee-body" clipPathUnits="userSpaceOnUse"><ellipse cx="-16" cy="-60" rx="17" ry="14"/></clipPath>
+      <g id="baguette">
+        <ellipse cx="0" cy="0" rx="22" ry="7.5" fill="#e9a94f" stroke="#a5651d" stroke-width="2"/>
+        <path d="M-12,-4 l5,6 M-2,-5 l5,6 M8,-4 l5,6" stroke="#fbe2b0" stroke-width="2" stroke-linecap="round"/>
+        <path d="M-17,-5 q-4,-9 3,-11 q1,6 -3,11 Z" fill="#4caf50"/>
+        <path d="M14,-6 q6,-6 9,-2 q-4,3 -9,2 Z" fill="#7bc96f"/>
+        <circle cx="6" cy="-6" r="2.6" fill="#e53935"/>
+      </g>
+      <g id="heart"><path d="M0,4 C-8,-2 -6,-9 0,-5 C6,-9 8,-2 0,4 Z" fill="#ff6b8b"/></g>
+    </defs>
+
+    <!-- sky, sun or moon, clouds -->
+    <rect width="1200" height="680" fill="url(#sky)"/>
+    <g class="day-only">
+      <g transform="translate(1110 84)">
+        <g class="sun-rays" stroke="#ffd23f" stroke-width="5" stroke-linecap="round">
+          <line x1="0" y1="-60" x2="0" y2="-74"/><line x1="0" y1="60" x2="0" y2="74"/><line x1="-60" y1="0" x2="-74" y2="0"/><line x1="60" y1="0" x2="74" y2="0"/>
+          <line x1="42" y1="42" x2="52" y2="52"/><line x1="-42" y1="42" x2="-52" y2="52"/><line x1="42" y1="-42" x2="52" y2="-52"/><line x1="-42" y1="-42" x2="-52" y2="-52"/>
+        </g>
+        <circle r="44" fill="#ffd84d"/>
+        <circle cx="-14" cy="-6" r="4" fill="#5b3a00"/><circle cx="14" cy="-6" r="4" fill="#5b3a00"/>
+        <path d="M-12,10 Q0,20 12,10" stroke="#5b3a00" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <circle cx="-24" cy="8" r="6" fill="#ff9f7a" opacity=".6"/><circle cx="24" cy="8" r="6" fill="#ff9f7a" opacity=".6"/>
+      </g>
+    </g>
+    <g class="night-only">
+      <g transform="translate(1100 86)">
+        <circle r="40" fill="#fff4c2"/><circle cx="16" cy="-12" r="38" fill="var(--sky-top)"/>
+      </g>
+      <g fill="#fff8d6">
+        <circle class="star" cx="120" cy="60" r="2.2"/><circle class="star" cx="300" cy="40" r="1.6" style="animation-delay:.6s"/>
+        <circle class="star" cx="520" cy="80" r="2" style="animation-delay:1.2s"/><circle class="star" cx="700" cy="36" r="1.8" style="animation-delay:.3s"/>
+        <circle class="star" cx="880" cy="70" r="2.4" style="animation-delay:1.8s"/><circle class="star" cx="980" cy="160" r="1.6" style="animation-delay:.9s"/>
+        <circle class="star" cx="420" cy="150" r="1.6" style="animation-delay:2.2s"/><circle class="star" cx="640" cy="170" r="1.4" style="animation-delay:1.5s"/>
+      </g>
+    </g>
+    <g fill="var(--cloud)" opacity=".9">
+      <g class="cloud" style="animation-duration:95s;animation-delay:-20s"><circle cx="0" cy="70" r="24"/><circle cx="28" cy="58" r="30"/><circle cx="60" cy="72" r="22"/><rect x="0" y="70" width="60" height="22" rx="11"/></g>
+      <g class="cloud" style="animation-duration:130s;animation-delay:-80s"><circle cx="0" cy="140" r="18"/><circle cx="22" cy="130" r="24"/><circle cx="48" cy="142" r="17"/><rect x="0" y="140" width="48" height="18" rx="9"/></g>
+      <g class="cloud" style="animation-duration:110s;animation-delay:-55s"><circle cx="0" cy="40" r="16"/><circle cx="20" cy="32" r="20"/><circle cx="42" cy="42" r="15"/><rect x="0" y="40" width="42" height="16" rx="8"/></g>
+    </g>
+
+    <!-- hills, grass, road -->
+    <path d="M0,300 C150,220 300,250 420,280 C560,210 760,230 880,280 C980,220 1120,230 1200,260 L1200,340 L0,340 Z" fill="var(--hill-back)"/>
+    <path d="M0,330 C200,290 380,320 600,300 C820,280 1000,320 1200,300 L1200,680 L0,680 Z" fill="var(--hill-front)"/>
+    <rect y="350" width="1200" height="330" fill="var(--grass)"/>
+    <rect y="410" width="1200" height="70" fill="var(--road)"/>
+    <rect y="410" width="1200" height="4" fill="var(--road-edge)"/><rect y="476" width="1200" height="4" fill="var(--road-edge)"/>
+    <line x1="0" y1="445" x2="1200" y2="445" stroke="#f4efe6" stroke-width="4" stroke-dasharray="26 20" opacity=".8"/>
+    <g fill="var(--flower)" id="flowers"></g>
+
+    <!-- the banh mi stand -->
+    <g id="stand">
+      <rect x="74" y="190" width="9" height="94" fill="#8b5a2b"/><rect x="298" y="190" width="9" height="94" fill="#8b5a2b"/>
+      <g class="chef" id="chef">
+        <g transform="translate(236 0)">
+          <ellipse cx="-14" cy="236" rx="9" ry="15" fill="#fff" opacity=".8" stroke="#9fd3ff" transform="rotate(-25 -14 236)"/>
+          <ellipse cx="0" cy="268" rx="22" ry="20" fill="#ffd23f" class="ink"/>
+          <rect x="-22" y="256" width="44" height="7" fill="#2b1d00"/>
+          <circle cx="0" cy="232" r="16" fill="#ffd23f" class="ink"/>
+          <circle cx="-6" cy="230" r="2.8" fill="#2b1d00"/><circle cx="6" cy="230" r="2.8" fill="#2b1d00"/>
+          <circle cx="-5" cy="229" r="1" fill="#fff"/><circle cx="7" cy="229" r="1" fill="#fff"/>
+          <circle cx="-10" cy="237" r="2.8" fill="#ff8fa3" opacity=".8"/><circle cx="10" cy="237" r="2.8" fill="#ff8fa3" opacity=".8"/>
+          <path d="M-5,238 Q0,243 5,238" stroke="#2b1d00" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <rect x="-15" y="210" width="30" height="8" rx="2" fill="#fff" stroke="#cfcfcf"/>
+          <circle cx="-10" cy="204" r="9" fill="#fff" stroke="#cfcfcf"/><circle cx="0" cy="198" r="11" fill="#fff" stroke="#cfcfcf"/><circle cx="10" cy="204" r="9" fill="#fff" stroke="#cfcfcf"/>
+          <rect x="-13" y="204" width="26" height="10" fill="#fff"/>
+          <g class="wave"><path d="M18,262 Q30,252 32,236" stroke="#2b1d00" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="32" cy="233" r="4.5" fill="#ffd23f" class="ink"/></g>
+        </g>
+      </g>
+      <g class="steam" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" opacity=".9">
+        <path d="M282,262 q-6,-8 0,-16 q6,-8 0,-16"/><path d="M270,262 q-6,-8 0,-16 q6,-8 0,-16"/><path d="M258,262 q-6,-8 0,-16 q6,-8 0,-16"/>
+      </g>
+      <rect x="60" y="280" width="262" height="110" rx="12" fill="#ffcf6e" stroke="#a0661b" stroke-width="3"/>
+      <rect x="52" y="272" width="278" height="13" rx="6" fill="#b5651d"/>
+      <rect x="240" y="262" width="56" height="10" rx="3" fill="#555"/>
+      <text x="191" y="330" text-anchor="middle" font-size="22" font-weight="700" fill="#7a4a12" font-family="Georgia, serif">worker_bees</text>
+      <text x="191" y="352" text-anchor="middle" font-size="12.5" fill="#7a4a12">fresh jobs every day</text>
+      <circle cx="110" cy="392" r="22" fill="#4a3b32"/><circle cx="110" cy="392" r="8" fill="#e8d5b5"/>
+      <circle cx="272" cy="392" r="22" fill="#4a3b32"/><circle cx="272" cy="392" r="8" fill="#e8d5b5"/>
+      <g id="awning">
+        <rect x="56" y="142" width="270" height="10" rx="5" fill="#b8321f"/>
+      </g>
+      <rect x="101" y="92" width="180" height="46" rx="11" fill="#2d6a4f" stroke="#f7e7b4" stroke-width="3"/>
+      <text x="191" y="124" text-anchor="middle" font-size="25" font-weight="800" letter-spacing="2" fill="#ffe9a8" font-family="Georgia, serif">B&#193;NH M&#204;</text>
+      <g id="orders"></g>
+      <g id="waiting-tag"></g>
+    </g>
+
+    <!-- the chalkboard: what's next -->
+    <g transform="translate(338 292)">
+      <line x1="8" y1="0" x2="-2" y2="108" stroke="#8b5a2b" stroke-width="5" stroke-linecap="round"/>
+      <line x1="80" y1="0" x2="90" y2="108" stroke="#8b5a2b" stroke-width="5" stroke-linecap="round"/>
+      <rect x="0" y="0" width="88" height="96" rx="6" fill="#2f3b35" stroke="#8b5a2b" stroke-width="4"/>
+      <text x="44" y="18" text-anchor="middle" font-size="11" font-weight="700" fill="#fff8e1" letter-spacing="1" font-family="'Comic Sans MS', 'Chalkboard SE', cursive">UP NEXT</text>
+      <g id="chalk" font-size="10" fill="#e3f2e1" font-family="'Comic Sans MS', 'Chalkboard SE', cursive"></g>
+    </g>
+
+    <g id="houses"></g>
+    <g id="bees"></g>
+  </svg>
+
+  <div class="panels">
+    <section class="panel"><h2>Out on delivery</h2><ul id="p-running"></ul></section>
+    <section class="panel"><h2>Waiting at the stand</h2><ul id="p-due"></ul></section>
+    <section class="panel"><h2>Coming up</h2><ul id="p-upcoming"></ul></section>
+    <section class="panel"><h2>Just delivered</h2><ul id="p-finished"></ul></section>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const SVG = "http://www.w3.org/2000/svg";
+const REFRESH_SECONDS = 10;
+const HELMETS = ["#ff7a7a", "#4cc3f0", "#a98bff", "#ff9f43", "#3ddc97", "#ff6fb5", "#4d7cfe", "#2ec4b6"];
+const WALLS = ["#ffd6a5", "#caffbf", "#9bf6ff", "#bdb2ff", "#ffc6ff", "#fdffb6", "#ffadad", "#a0c4ff"];
+const ROOFS = ["#e07a5f", "#6a994e", "#3a86ff", "#7b5ea7", "#c9184a", "#d4a017", "#d62828", "#457b9d"];
+const SLOTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => ({ x: 520 + (i % 5) * 135, y: i < 5 ? 340 : 630, top: i < 5 }));
+const PARKING = [100, 180, 260, 340].map((x) => ({ x, y: 470 }));
+
+const bees = new Map();     // worker name -> {el, x, y}
+const houses = new Map();   // job name -> {el, slot}
+
+function hash(text) { let h = 0; for (const c of text) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+function pick(list, text) { return list[hash(text) % list.length]; }
+function short(text, n) { return text.length > n ? text.slice(0, n - 1) + "…" : text; }
+function esc(text) { return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function at(iso) {
+  const d = new Date(iso), today = new Date();
+  const time = d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === today.toDateString() ? time : d.toLocaleDateString(undefined, { weekday: "short" }) + " " + time;
+}
+function hhmm(iso) { const d = new Date(iso); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+function minutesSince(iso, now) { return Math.max(0, Math.round((now - new Date(iso)) / 60000)); }
+function sameDay(iso) { return new Date(iso).toDateString() === new Date().toDateString(); }
+function duration(minutes) { return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`; }
+function node(markup) { const g = document.createElementNS(SVG, "g"); g.innerHTML = markup; return g; }
+
+// ---------------------------------------------------------------- scenery
+
+function drawScenery() {
+  const awning = $("awning");
+  let stripes = "";
+  for (let i = 0; i < 8; i++) {
+    const x = 58 + i * 33, color = i % 2 ? "#fff4e0" : "#e94f37";
+    stripes += `<rect x="${x}" y="150" width="33" height="38" fill="${color}"/><circle cx="${x + 16.5}" cy="188" r="16.5" fill="${color}"/>`;
+  }
+  awning.insertAdjacentHTML("afterbegin", stripes);
+  let flowers = "";
+  const spots = [[30, 520], [70, 600], [140, 560], [200, 640], [260, 520], [330, 590], [400, 650], [40, 660], [150, 505], [380, 530], [1160, 520], [1180, 640], [450, 500], [300, 660]];
+  for (const [x, y] of spots) {
+    flowers += `<g transform="translate(${x} ${y})"><circle cx="-4" cy="0" r="3.2"/><circle cx="4" cy="0" r="3.2"/><circle cx="0" cy="-4" r="3.2"/><circle cx="0" cy="4" r="3.2"/><circle r="2.4" fill="#ffc93c"/></g>`;
+  }
+  $("flowers").innerHTML = flowers;
+}
+
+// ------------------------------------------------------------- the bees
+
+function beeMarkup(name) {
+  const helmet = pick(HELMETS, name);
+  const label = short(name, 14), width = label.length * 7.2 + 18;
+  return `
+    <g transform="scale(.82)">
+      <g class="face">
+        <ellipse cx="0" cy="0" rx="46" ry="5" fill="#000" opacity=".15"/>
+        <g class="puffs" fill="#fff"><circle cx="-60" cy="-18" r="5"/><circle cx="-60" cy="-18" r="5"/><circle cx="-60" cy="-18" r="5"/></g>
+        <g class="bounce">
+          <g transform="translate(-30 -14)"><circle r="14" fill="#3b3330"/><circle r="7" fill="#d9d4cf"/><g class="spokes" stroke="#3b3330" stroke-width="2"><line x1="-7" y1="0" x2="7" y2="0"/><line x1="0" y1="-7" x2="0" y2="7"/></g></g>
+          <g transform="translate(34 -14)"><circle r="14" fill="#3b3330"/><circle r="7" fill="#d9d4cf"/><g class="spokes" stroke="#3b3330" stroke-width="2"><line x1="-7" y1="0" x2="7" y2="0"/><line x1="0" y1="-7" x2="0" y2="7"/></g></g>
+          <path d="M-52,-20 C-54,-42 -30,-50 -8,-46 L-4,-24 Z" fill="${helmet}" stroke="#2b1d00" stroke-width="1.5"/>
+          <rect x="-12" y="-27" width="34" height="8" rx="4" fill="${helmet}" stroke="#2b1d00" stroke-width="1.5"/>
+          <path d="M16,-22 L22,-62 L31,-62 L29,-22 Z" fill="${helmet}" stroke="#2b1d00" stroke-width="1.5"/>
+          <path d="M19,-22 A16,16 0 0 1 50,-20" stroke="${helmet}" stroke-width="5" fill="none" stroke-linecap="round"/>
+          <rect x="-40" y="-52" width="32" height="8" rx="4" fill="#5a4636"/>
+          <circle cx="33" cy="-55" r="4.5" fill="#fff3a0" stroke="#c9a400" stroke-width="1.5"/>
+          <rect x="-62" y="-76" width="28" height="24" rx="4" fill="#e2553f" stroke="#2b1d00" stroke-width="1.5"/>
+          <use href="#baguette" transform="translate(-48 -64) scale(.42) rotate(-12)"/>
+          <g class="wings">
+            <ellipse cx="-24" cy="-84" rx="8" ry="15" fill="#fff" opacity=".8" stroke="#8fd0ff" stroke-width="1.5" transform="rotate(-28 -24 -84)"/>
+            <ellipse cx="-13" cy="-86" rx="7" ry="13" fill="#fff" opacity=".8" stroke="#8fd0ff" stroke-width="1.5" transform="rotate(-8 -13 -86)"/>
+          </g>
+          <path d="M-12,-48 L-6,-28" class="ink" stroke-width="3"/>
+          <polygon points="-33,-62 -41,-59 -33,-56" fill="#2b1d00"/>
+          <ellipse cx="-16" cy="-60" rx="17" ry="14" fill="#ffd23f"/>
+          <g clip-path="url(#bee-body)" fill="#2b1d00"><rect x="-23" y="-76" width="5" height="32"/><rect x="-13" y="-76" width="5" height="32"/></g>
+          <ellipse cx="-16" cy="-60" rx="17" ry="14" fill="none" class="ink"/>
+          <path d="M-4,-60 Q8,-67 23,-63" class="ink" stroke-width="3" fill="none"/>
+          <g class="antennae"><path d="M2,-88 Q-1,-97 -5,-100 M11,-89 Q15,-98 19,-100" class="ink" fill="none"/><circle cx="-5" cy="-100" r="2.6" fill="#2b1d00"/><circle cx="19" cy="-100" r="2.6" fill="#2b1d00"/></g>
+          <circle cx="6" cy="-76" r="12" fill="#ffd23f" class="ink"/>
+          <path d="M-6.5,-78 A12.5,12.5 0 0 1 18.5,-78 Z" fill="${helmet}" stroke="#2b1d00" stroke-width="1.5"/>
+          <circle cx="11" cy="-73" r="3" fill="#2b1d00"/><circle cx="12" cy="-74.2" r="1" fill="#fff"/>
+          <circle cx="13.5" cy="-67" r="2.6" fill="#ff8fa3" opacity=".8"/>
+          <path d="M6,-67 Q9.5,-63.5 13,-66" stroke="#2b1d00" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        </g>
+      </g>
+      <g class="bubble-slot"></g>
+    </g>
+    <rect x="${-width / 2}" y="6" width="${width}" height="20" rx="10" fill="#fffdf5" stroke="${helmet}" stroke-width="2"/>
+    <text x="0" y="20.5" text-anchor="middle" font-size="12" font-weight="600" fill="#3b2f20">${esc(label)}</text>`;
+}
+
+function placeBee(name, x, y, busy, bubble) {
+  let bee = bees.get(name);
+  if (!bee) {
+    const el = node(beeMarkup(name));
+    el.classList.add("bee", "instant");
+    $("bees").appendChild(el);
+    bee = { el, x, y };
+    bees.set(name, bee);
+    el.style.transform = `translate(${x}px, ${y}px)`;
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove("instant")));
+  } else if (bee.x !== x || bee.y !== y) {
+    bee.el.classList.toggle("left", x < bee.x);
+    bee.el.classList.add("moving");
+    clearTimeout(bee.timer);
+    bee.timer = setTimeout(() => bee.el.classList.remove("moving", "left"), 3000);
+    bee.x = x; bee.y = y;
+    bee.el.style.transform = `translate(${x}px, ${y}px)`;
+  }
+  bee.el.classList.toggle("busy", busy);
+  bee.seen = true;
+  const slot = bee.el.querySelector(".bubble-slot");
+  if (slot.dataset.kind !== bubble) {
+    slot.dataset.kind = bubble || "";
+    slot.innerHTML = !bubble ? "" : `<g class="bubble"><path d="M34,-112 h40 a10,10 0 0 1 10,10 v14 a10,10 0 0 1 -10,10 h-28 l-10,9 l2,-9 h-4 a10,10 0 0 1 -10,-10 v-14 a10,10 0 0 1 10,-10 Z" fill="#fff" stroke="#2b1d00" stroke-width="1.5"/>
+      ${bubble === "late" ? `<text x="54" y="-89" text-anchor="middle" font-size="18" font-weight="800" fill="#d62828">!?</text>` : `<use href="#heart" transform="translate(54 -95) scale(1.4)"/>`}</g>`;
+  }
+}
+
+// ----------------------------------------------------------- the houses
+
+function houseMarkup(name) {
+  const wall = pick(WALLS, name), roof = ROOFS[WALLS.indexOf(wall)];
+  return `<g class="pop">
+    <title>${esc(name)}</title>
+    <ellipse cx="0" cy="2" rx="60" ry="6" fill="#000" opacity=".12"/>
+    <rect x="20" y="-108" width="13" height="28" fill="#9c6644" stroke="#2b1d00" stroke-width="1.5"/>
+    <rect x="-46" y="-72" width="92" height="72" rx="4" fill="${wall}" stroke="#2b1d00" stroke-width="2"/>
+    <path d="M-58,-68 L0,-116 L58,-68 Z" fill="${roof}" stroke="#2b1d00" stroke-width="2" stroke-linejoin="round"/>
+    <rect x="-11" y="-38" width="22" height="38" rx="10" fill="#8b5a3c" stroke="#2b1d00" stroke-width="1.5"/>
+    <circle cx="5" cy="-18" r="2" fill="#ffd23f"/>
+    <rect x="-38" y="-58" width="20" height="17" rx="3" fill="var(--window)" stroke="#2b1d00" stroke-width="1.5"/>
+    <rect x="18" y="-58" width="20" height="17" rx="3" fill="var(--window)" stroke="#2b1d00" stroke-width="1.5"/>
+    <g class="glow" fill="#ffd23f" opacity=".9"><rect x="-37" y="-57" width="18" height="15" rx="2"/><rect x="19" y="-57" width="18" height="15" rx="2"/></g>
+    <g class="extra"></g>
+  </g>
+  <g class="label"></g>`;
+}
+
+const STATUS = {
+  running: (job) => ["delivering now", "#2f7d4f"],
+  late: (job) => ["late, waiting", "#c2412d"],
+  waiting: (job) => ["at the stand", "#a06400"],
+  next: (job) => ["next " + (sameDay(job.due) ? hhmm(job.due) : at(job.due)), "#5a5046"],
+  complete: (job) => ["done " + hhmm(job.finished), "#2f7d4f"],
+  failed: (job) => ["didn't go well " + hhmm(job.finished), "#c2412d"],
+};
+
+function updateHouse(house, status, job, top) {
+  if (house.status === status + (job.due || "") + (job.finished || "")) return;
+  house.status = status + (job.due || "") + (job.finished || "");
+  house.el.classList.toggle("running", status === "running");
+  const [text, color] = STATUS[status](job);
+  const name = short(job.name, 18);
+  const width = Math.max(name.length * 7, text.length * 6) + 20;
+  const y = top ? 5 : 6;
+  house.el.querySelector(".label").innerHTML = `<rect x="${-width / 2}" y="${y}" width="${width}" height="32" rx="9" fill="#fffdf5" stroke="#2b1d00" stroke-opacity=".25"/>
+    <text x="0" y="${y + 14}" text-anchor="middle" font-size="12" font-weight="700" fill="#3b2f20">${esc(name)}</text>
+    <text x="0" y="${y + 27}" text-anchor="middle" font-size="10.5" fill="${color}">${esc(text)}</text>`;
+  let extra = "";
+  if (status === "running") extra = `<g class="hearts"><g transform="translate(26 -112)"><use href="#heart"/></g><g transform="translate(32 -112)"><use href="#heart"/></g><g transform="translate(22 -112)"><use href="#heart"/></g></g>`;
+  if (status === "complete") extra = `<g class="flag"><line x1="0" y1="-116" x2="0" y2="-142" stroke="#5a4636" stroke-width="2.5"/><path d="M0,-142 L20,-136 L0,-130 Z" fill="#3ddc97"/></g>`;
+  if (status === "failed") extra = `<g transform="translate(-6 -150)"><g fill="#9aa5b1"><circle cx="-12" cy="0" r="10"/><circle cx="4" cy="-6" r="13"/><circle cx="18" cy="0" r="9"/><rect x="-12" y="0" width="30" height="10" rx="5"/></g>
+    <g class="rain" stroke="#4cc3f0" stroke-width="2.5" stroke-linecap="round"><line x1="-8" y1="14" x2="-10" y2="20"/><line x1="4" y1="14" x2="2" y2="20"/><line x1="15" y1="14" x2="13" y2="20"/></g></g>`;
+  if (status === "late") extra = `<text x="0" y="-124" text-anchor="middle" font-size="20" font-weight="800" fill="#d62828">!</text>`;
+  house.el.querySelector(".extra").innerHTML = extra;
+}
+
+function showHouses(wanted) {
+  // keep houses where they are; new ones take the first free plot
+  for (const [name, house] of houses) {
+    if (!wanted.has(name)) {
+      houses.delete(name);
+      house.el.classList.add("leaving");
+      setTimeout(() => house.el.remove(), 700);
+    }
+  }
+  const used = new Set([...houses.values()].map((h) => h.slot));
+  for (const [name, item] of wanted) {
+    let house = houses.get(name);
+    if (!house) {
+      const slot = SLOTS.findIndex((_, i) => !used.has(i));
+      if (slot < 0) continue;
+      used.add(slot);
+      const el = node(houseMarkup(name));
+      el.classList.add("house");
+      el.style.transform = `translate(${SLOTS[slot].x}px, ${SLOTS[slot].y}px)`;
+      $("houses").appendChild(el);
+      house = { el, slot };
+      houses.set(name, house);
+    }
+    updateHouse(house, item.status, item.job, SLOTS[house.slot].top);
+  }
+}
+
+// ---------------------------------------------------------- the stand
+
+function showOrders(due) {
+  const count = Math.min(due.length, 5);
+  let markup = "";
+  for (let i = 0; i < count; i++) {
+    const x = 92 + (i % 3) * 44 + (i >= 3 ? 22 : 0), y = i >= 3 ? 256 : 266;
+    markup += `<g transform="translate(${x} ${y})"><use class="order" href="#baguette" style="animation-delay:${i * 0.08}s"/></g>`;
+  }
+  $("orders").innerHTML = markup;
+  // the chef calls out how many orders are waiting
+  const call = due.length === 1 ? "1 order up!" : `${due.length} orders up!`;
+  const width = call.length * 7.6 + 20;
+  $("waiting-tag").innerHTML = due.length
+    ? `<g class="order"><path d="M334,198 h${width} a10,10 0 0 1 10,10 v12 a10,10 0 0 1 -10,10 h-${width} a10,10 0 0 1 -10,-10 v-2 l-20,10 l20,-20 a10,10 0 0 1 10,-10 Z" fill="#fff" stroke="#e2553f" stroke-width="2"/>
+        <text x="${334 + width / 2}" y="219" text-anchor="middle" font-size="13" font-weight="700" fill="#e2553f">${call}</text></g>`
+    : "";
+}
+
+function showChalkboard(upcoming) {
+  const lines = upcoming.slice(0, 4).map((job, i) => {
+    return `<text x="8" y="${36 + i * 16}">${hhmm(job.due)} ${esc(short(job.name, 8))}</text>`;
+  });
+  $("chalk").innerHTML = lines.join("") || `<text x="44" y="52" text-anchor="middle">all quiet</text>`;
+}
+
+// ------------------------------------------------------------ the panels
+
+function listItems(id, items, empty) {
+  $(id).innerHTML = items.length ? items.join("") : `<li class="none">${empty}</li>`;
+}
+
+function showPanels(state, now) {
+  const running = [], resting = [];
+  for (const worker of state.workers) {
+    const color = pick(HELMETS, worker.name);
+    const minutes = minutesSince(worker.changed, now);
+    if (worker.jobs.length) {
+      const over = minutes > state.timeout_minutes;
+      running.push(`<li><span class="dot" style="background:${color}"></span><span class="n">${esc(worker.jobs[0].name)}</span>
+        <span class="x ${over ? "warn" : ""}">${esc(worker.name)}, ${over ? "still there after " : "for "}${duration(minutes)}</span></li>`);
+    } else {
+      resting.push(`<li><span class="dot" style="background:${color}"></span><span class="n">${esc(worker.name)}</span>
+        <span class="x">resting, last seen ${at(worker.changed)}</span></li>`);
+    }
+  }
+  listItems("p-running", running.concat(resting), "No workers yet. A worker's bee appears the first time it runs.");
+  listItems("p-due", state.due.map((job) => {
+    const late = minutesSince(job.due, now);
+    return `<li><span class="t">${at(job.due)}</span><span class="n">${esc(job.name)}</span><span class="x ${late > 15 ? "warn" : ""}">${late > 15 ? `late by ${duration(late)}` : "due now"}</span></li>`;
+  }), "Nothing waiting. Every order has gone out.");
+  listItems("p-upcoming", state.upcoming.slice(0, 10).map((job) =>
+    `<li><span class="t">${at(job.due)}</span><span class="n">${esc(job.name)}</span><span class="x">${esc(job.kind)}</span></li>`),
+    "Nothing in the queue. The nightly build adds the next few days.");
+  listItems("p-finished", state.finished.map((job) =>
+    `<li><span class="t">${at(job.finished)}</span><span class="n">${esc(job.name)}</span><span class="x ${job.result === "failed" ? "warn" : "ok"}">${job.result === "failed" ? "failed" : "done"}</span></li>`),
+    "Nothing finished yet.");
+}
+
+// ------------------------------------------------------------- refresh
+
+function show(state) {
+  const now = new Date(state.now);
+  const wanted = new Map();   // job name -> {status, job}, most important first
+  const add = (name, status, job) => { if (!wanted.has(name) && wanted.size < SLOTS.length) wanted.set(name, { status, job }); };
+  for (const worker of state.workers) for (const job of worker.jobs) add(job.name, "running", job);
+  for (const job of state.due) add(job.name, minutesSince(job.due, now) > 15 ? "late" : "waiting", job);
+  for (const job of state.finished) if (minutesSince(job.finished, now) < 60) add(job.name, job.result, job);
+  for (const job of state.upcoming) add(job.name, "next", job);
+  showHouses(wanted);
+
+  for (const bee of bees.values()) bee.seen = false;
+  const atHouse = new Map();
+  let parked = 0;
+  for (const worker of state.workers) {
+    const job = worker.jobs[0];
+    const house = job && houses.get(job.name);
+    if (house) {
+      const spot = SLOTS[house.slot], n = atHouse.get(job.name) || 0;
+      atHouse.set(job.name, n + 1);
+      const late = minutesSince(worker.changed, now) > state.timeout_minutes;
+      placeBee(worker.name, spot.x + (spot.top ? -30 : 30) + (spot.top ? -1 : 1) * n * 36, 478, true, late ? "late" : "heart");
+    } else {
+      const spot = PARKING[parked % PARKING.length], row = Math.floor(parked / PARKING.length);
+      placeBee(worker.name, spot.x, spot.y + row * 70, false, null);
+      parked++;
+    }
+  }
+  for (const [name, bee] of bees) if (!bee.seen) { bee.el.remove(); bees.delete(name); }
+
+  showOrders(state.due);
+  showChalkboard(state.upcoming);
+  showPanels(state, now);
+  const busy = state.workers.filter((w) => w.jobs.length).length;
+  $("status").textContent = `${busy} of ${state.workers.length} bees out, ${state.queued} jobs in the queue. Read-only, updated ${new Date().toLocaleTimeString()}.`;
+  $("scene-title").textContent = `The banh mi stand: ${busy} of ${state.workers.length} bees out delivering, ${state.due.length} orders waiting.`;
+}
+
+async function refresh() {
+  try {
+    const response = await fetch("/api/state");
+    const state = await response.json();
+    if (state.error) throw new Error(state.error);
+    $("banner").style.display = "none";
+    show(state);
+  } catch (error) {
+    $("banner").textContent = "Can't read the queue right now: " + error.message;
+    $("banner").style.display = "block";
+  }
+}
+
+drawScenery();
+refresh();
+setInterval(refresh, REFRESH_SECONDS * 1000);
+</script>
+</body>
+</html>

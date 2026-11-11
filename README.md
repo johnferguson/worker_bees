@@ -39,7 +39,10 @@ top_level_directory/
 | `ZZZ_check_folders.py` | Checks the folders exist |
 | `ZZZ_build_queue.py` | Writes the `.sched` files from the schedule. `--preview` shows what it would do |
 | `ZZZ_worker.py` | The worker. Runs due jobs until none are left, then exits |
+| `ZZZ_schedule_editor.py` | A web page for editing the schedule (below) |
+| `ZZZ_monitor.py` | A web page showing what the workers are doing (below) |
 | `worker_bees_settings.py` | Reads the settings file for the other scripts |
+| `worker_bees_web.py`, `web/` | The small web server and the pages the two web scripts use |
 
 ## Setting up
 
@@ -160,6 +163,58 @@ settings file to paths under `/mnt/worker_bees`, then add this with
 
 WSL only runs while it is open, and cron has to be started inside it
 (`sudo service cron start`), so Task Scheduler is the more dependable choice.
+
+## Web pages
+
+Both are optional: start one when you want it and close it when you're done.
+They need nothing installed beyond uv, and only answer the computer they run
+on. Add `--host 0.0.0.0` to let other PCs open them, but anyone who can reach
+the schedule editor can change the schedule.
+
+### Schedule editor
+
+```
+uv run ZZZ_schedule_editor.py
+```
+
+then open <http://localhost:8765>. The jobs are on the left: click one to
+change it, use **+ Add job** to add one at the end, drag them (or use the
+arrows) to change their order, or tick **Paused**. Each change is written
+straight into `001_worker_bees_crontab.txt`, which stays a plain text file you
+can still edit by hand. Comment lines right above a job are its description.
+
+Each job shows how many times it runs a day, a week and a month, and its next
+few runs, and the top of the page adds them up for the whole schedule.
+
+The previous version of the file is kept as `001_worker_bees_crontab.txt.bak`.
+If the file is changed somewhere else while the page is open, the page won't
+save over it: it shows the file as it is now and you make your change again.
+
+It edits the schedule on the computer it runs on. Changes reach the queue at
+the next queue build, or straight away with `uv run ZZZ_build_queue.py`.
+
+### Monitor: the banh mi stand
+
+```
+uv run ZZZ_monitor.py
+```
+
+then open <http://localhost:8766>. The queue is a banh mi stand. Each worker
+is a bee on a moped, and each house is a job's script:
+
+- A bee out at a house is running that job now. A bee with **!?** has been
+  there longer than `job_timeout_minutes`: its PC may have stopped mid-job.
+- Bees parked at the stand are waiting for work.
+- The chef calls out orders that are due but not picked up yet, and the
+  chalkboard shows what's next.
+- Houses show what's coming up. A green flag means a job just finished, a
+  rain cloud means it failed, and **!** means it's late.
+
+The lists under the picture give the same details in words. It updates
+every 10 seconds.
+
+It only reads. It lists the queue folders and never opens, moves or changes
+a file, so it can't get in a worker's way, and turning it off changes nothing.
 
 ## Good to know
 

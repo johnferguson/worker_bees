@@ -144,6 +144,21 @@ it to the end of the job file when the script finishes.
 
 A way to watch the jobs: what's waiting, what's running, what failed.
 
-- [ ] The monitor needs no special data of its own. It only reads the queue
-      folders and the logs (plan 4), a bit like `tail` on a log file.
-- [ ] Turning the monitor off, or never using it, changes nothing else.
+- [x] The monitor needs no special data of its own. It only reads the queue
+      folders, and doesn't even open the job files, so it can't stop a
+      worker moving one (`ZZZ_monitor.py`, the banh mi stand).
+- [x] Turning the monitor off, or never using it, changes nothing else.
+- [ ] Show the last lines of a running job's log, once logs are written line
+      by line (plan 4). This needs a safe way to read a file a worker is
+      still writing.
+
+### 6. Schedule editor
+
+A web page for the schedule, so jobs can be added, changed, paused and put
+in order without editing the crontab file by hand.
+
+- [x] Writes straight into the crontab file, which stays plain text
+      (`ZZZ_schedule_editor.py`).
+- [x] Shows how often each job runs (a day, a week, a month) and its next runs.
+- [ ] It edits the schedule on the PC it runs on. Once the schedule moves to
+      the shared folder, every PC will edit the same one.

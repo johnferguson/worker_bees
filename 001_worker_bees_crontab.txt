@@ -21,7 +21,9 @@
 # the job runs on days that match EITHER one: 0 6 1 * 1 runs on the 1st AND
 # on every Monday.
 #
-# Lines starting with # are ignored, so put a # in front of a job to pause it.
+# Lines starting with # are ignored. To pause a job, put a # right in front
+# of it with no space, like the last example. Comment lines right above a
+# job are its description in the schedule editor (ZZZ_schedule_editor.py).
 #
 # script: relative paths are looked up in scripts_directory (see
 # 000_worker_bees_queue.toml), then in the worker_bees folder. A job's name
@@ -40,7 +42,6 @@
 
 # Rebuilds the queue every night. Keep this one.
 0 22 * * *          ZZZ_build_queue.py
-
 
 # ---- EXAMPLES - replace these with your real jobs ----
 
