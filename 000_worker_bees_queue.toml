@@ -1,5 +1,8 @@
 # worker_bees settings
 #
+# This file stays on the worker computer: each machine has its own copy,
+# so each one can say where the shared folders are from where it sits.
+#
 # top_level_directory is the shared folder that holds the required_folders
 # required_folders are the folders necessary for the queue to run
 
@@ -25,3 +28,12 @@ job_timeout_minutes = 240
 # because Windows drives look different there (C:/ is /mnt/c/).
 # Remove the # to use it.
 # top_level_directory_linux = '/mnt/c/worker_bees'
+
+# scripts_directory is where the job scripts are. The script named on the
+# first line of a job file is looked up here first, then in the worker_bees
+# folder. Put it on the shared folder so every worker runs the same scripts.
+# Leave it out to use the worker_bees folder. Remove the # to use it.
+# scripts_directory = '//server/share/worker_bees_scripts'
+
+# Like top_level_directory_linux: used instead under Linux or WSL.
+# scripts_directory_linux = '/mnt/worker_bees/worker_bees_scripts'

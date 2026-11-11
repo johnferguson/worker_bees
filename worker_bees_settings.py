@@ -27,19 +27,34 @@ def load_toml(path):
         raise SettingsError(f"Could not read {path.name}: {error}")
 
 
-def load_settings():
-    """Return the settings file as a dict, plus 'top_dir': the top level directory as a Path.
+def machine_path(settings, key):
+    """Return the path in settings[key], or None if it isn't set.
 
-    On Linux (including WSL) top_level_directory_linux is used instead of
-    top_level_directory when it is set.
+    On Linux (including WSL) key + '_linux' is used instead when it is set,
+    because Windows paths look different there.
+    """
+    if os.name != "nt" and f"{key}_linux" in settings:
+        key = f"{key}_linux"
+    if key not in settings:
+        return None
+    return Path(settings[key])
+
+
+def load_settings():
+    """Return the settings file as a dict, plus two Paths:
+
+    'top_dir'      the top level directory, which holds the queue folders
+    'scripts_dir'  where job scripts are looked up (the worker_bees folder
+                   if scripts_directory isn't set)
     """
     settings = load_toml(CONFIG_FILE)
-    key = "top_level_directory"
-    if os.name != "nt" and "top_level_directory_linux" in settings:
-        key = "top_level_directory_linux"
-    if key not in settings:
-        raise SettingsError(f"{key} is not set in {CONFIG_FILE.name}")
-    settings["top_dir"] = Path(settings[key])
+    top_dir = machine_path(settings, "top_level_directory")
+    if top_dir is None:
+        raise SettingsError(f"top_level_directory is not set in {CONFIG_FILE.name}")
+    settings["top_dir"] = top_dir
+    scripts_dir = machine_path(settings, "scripts_directory")
+    # a relative scripts_directory starts from the worker_bees folder
+    settings["scripts_dir"] = HERE / scripts_dir if scripts_dir else HERE
     return settings
 
 

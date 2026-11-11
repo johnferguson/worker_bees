@@ -95,16 +95,29 @@ def claim_next_job(queue, my_running):
     return None
 
 
-def run_job(path, timeout_minutes):
+def find_script(script_text, scripts_dir):
+    """Return the full path of the script named in a job file.
+
+    A relative path is looked up in the scripts directory first, then in the
+    worker_bees folder (where ZZZ_build_queue.py is).
+    """
+    script = Path(script_text)
+    if script.is_absolute():
+        return script
+    for base in (scripts_dir, HERE):
+        if (base / script).is_file():
+            return base / script
+    return scripts_dir / script  # not found: report where it should have been
+
+
+def run_job(path, scripts_dir, timeout_minutes):
     """Run the script named on the first line of the job file and add the output to the file.
 
     Returns True if the script finished with exit code 0.
     """
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     script_text = lines[0].strip() if lines else ""
-    script = Path(script_text)
-    if not script.is_absolute():
-        script = HERE / script  # relative paths start from the worker_bees folder
+    script = find_script(script_text, scripts_dir)
 
     started = datetime.now()
     if not script_text:
@@ -146,6 +159,9 @@ def main():
         running = folder(settings, "running_folder")
         failed = folder(settings, "failed_folder")
         complete = folder(settings, "complete_folder")
+        scripts_dir = settings["scripts_dir"]
+        if not scripts_dir.is_dir():
+            raise SettingsError(f"Scripts directory not found: {scripts_dir}  (scripts_directory in {CONFIG_FILE.name})")
         timeout_minutes = settings.get("job_timeout_minutes", 240)
         if not isinstance(timeout_minutes, (int, float)) or timeout_minutes <= 0:
             raise SettingsError(f"job_timeout_minutes in {CONFIG_FILE.name} should be a number like 240")
@@ -167,7 +183,7 @@ def main():
         if job is None:
             break
         print(f"running   {job.name}")
-        worked = run_job(job, timeout_minutes)
+        worked = run_job(job, scripts_dir, timeout_minutes)
         finished = move_into(job, complete if worked else failed)
         print(f"{'complete' if worked else 'FAILED  '}  {finished.name}")
 

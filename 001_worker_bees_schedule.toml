@@ -5,7 +5,8 @@
 # job added to the queue by hand should use another ending, e.g. .request
 #
 #   name      letters, numbers, _ and - only. Must be unique.
-#   script    the script to run. Relative paths start from the worker_bees folder.
+#   script    the script to run. Relative paths are looked up in scripts_directory
+#             (see 000_worker_bees_queue.toml), then in the worker_bees folder.
 #   days      which days it runs, one of:
 #               daily
 #               mon-fri          mon,wed,fri      sat,sun

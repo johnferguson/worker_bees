@@ -2,7 +2,7 @@
 
 Reads top_level_directory and required_folders from
 000_worker_bees_queue.toml and checks that every required folder exists
-inside the top level directory.
+inside the top level directory, and that the scripts directory exists.
 
 Run it with:  uv run ZZZ_check_folders.py
 """
@@ -38,6 +38,13 @@ def main():
         else:
             print(f"  MISSING  {folder}")
             missing.append(name)
+
+    scripts_dir = settings["scripts_dir"]
+    if scripts_dir.is_dir():
+        print(f"\nScripts directory: {scripts_dir}  ok")
+    else:
+        print(f"\nScripts directory: {scripts_dir}  MISSING")
+        missing.append("scripts directory")
 
     if missing:
         print(f"\n{len(missing)} folder(s) missing: {', '.join(missing)}")

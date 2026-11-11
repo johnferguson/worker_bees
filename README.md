@@ -15,8 +15,12 @@ top_level_directory/
   004_complete/    finished jobs whose script worked
 ```
 
-- A job file's first line is the script to run. Relative paths start from this
-  folder; full paths work too.
+- A job file's first line is the script to run. Relative paths are looked up in
+  `scripts_directory` first, then in this folder; full paths work too.
+- `000_worker_bees_queue.toml` stays on each worker computer. It tells that
+  worker where the shared folders are: `top_level_directory` for the queue and
+  `scripts_directory` for the job scripts. Put both on the shared folder so
+  every worker sees the same jobs and runs the same scripts.
 - A worker claims a job by moving it into its own `002_running` folder. Only one
   worker can move a file, so a job never runs twice at once.
 - When a job finishes, the worker adds its output to the end of the job file,
@@ -30,7 +34,7 @@ top_level_directory/
 
 | File | What it is |
 |---|---|
-| `000_worker_bees_queue.toml` | Settings: where the folders are, how far ahead to build, job timeout |
+| `000_worker_bees_queue.toml` | This machine's settings: where the queue folders and job scripts are, how far ahead to build, job timeout |
 | `001_worker_bees_schedule.toml` | The scheduled jobs. The top of the file explains the options |
 | `ZZZ_check_folders.py` | Checks the folders exist |
 | `ZZZ_build_queue.py` | Writes the `.sched` files from the schedule. `--preview` shows what it would do |
@@ -42,7 +46,8 @@ top_level_directory/
 1. Install [uv](https://docs.astral.sh/uv/). It installs Python and each
    script's packages, without admin rights.
 2. Set `top_level_directory` in `000_worker_bees_queue.toml`, and create the
-   four folders there. `uv run ZZZ_check_folders.py` checks them.
+   four folders there. Set `scripts_directory` to the folder holding your job
+   scripts. `uv run ZZZ_check_folders.py` checks them.
 3. Put your jobs in `001_worker_bees_schedule.toml`, check them with
    `uv run ZZZ_build_queue.py --preview`, then run `uv run ZZZ_build_queue.py`.
 4. Start a worker every few minutes on each machine (below).
