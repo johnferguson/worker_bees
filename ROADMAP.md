@@ -65,10 +65,14 @@ Open questions:
   mounted, since WSL can't use a `\\server\share` path directly.
 - Which account do the workers use on the server? It needs to read, write,
   rename and delete files in all four folders.
-- The Unix server only holds the files. It has no Python, so it doesn't run
-  a worker. The nightly queue build runs as an ordinary job on whichever
-  PC worker picks it up, and `forward_days` (7) keeps the queue going if
-  it's missed for a few nights.
+- The Unix server (HP-UX) only holds the files. It has no Python (and uv
+  doesn't support HP-UX), so it doesn't run a worker. The nightly queue
+  build runs as an ordinary job on whichever PC worker picks it up, and
+  `forward_days` (7) keeps the queue going if it's missed for a few nights.
+- Check that Windows 10/11 PCs can open the share on the HP-UX server.
+  Older Samba / HP CIFS Server versions only speak SMB1, which newer
+  Windows turns off by default. If the PCs already use other shares on
+  that server, this is fine.
 - For jobs that need SharePoint files: can those syncs be scripted, or do
   they need a short manual checklist? They're set up through OneDrive,
   which is hard to automate.
