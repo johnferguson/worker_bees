@@ -1,0 +1,59 @@
+# worker_bees schedule
+#
+# One [[job]] section per job. ZZZ_build_queue.py turns these into
+# .sched files in the queue folder. It only ever changes .sched files, so a
+# job added to the queue by hand should use another ending, e.g. .request
+#
+#   name      letters, numbers, _ and - only. Must be unique.
+#   script    the script to run. Relative paths start from the worker_bees folder.
+#   days      which days it runs, one of:
+#               daily
+#               mon-fri          mon,wed,fri      sat,sun
+#               1st mon          2nd tue          last fri
+#               day 1            day 1,15         last day
+#             (day 31 is skipped in shorter months - use last day for month end)
+#   times     list of times, e.g. ["08:00", "13:00"]
+#       - or -
+#   every_minutes and between, e.g. every_minutes = 30 and between = ["07:00", "18:00"]
+#
+#   enabled   optional. enabled = false pauses the job without deleting it.
+#
+# After editing, check it with:   uv run ZZZ_build_queue.py --preview
+# then apply it straight away:    uv run ZZZ_build_queue.py
+
+
+# Rebuilds the queue every night. Keep this one.
+[[job]]
+name   = "build_queue"
+script = 'ZZZ_build_queue.py'
+days   = "daily"
+times  = ["22:00"]
+
+
+# ---- EXAMPLES - replace these with your real jobs ----
+
+[[job]]
+name   = "ftp_upload"
+script = 'jobs/example_ftp_upload.py'
+days   = "mon-fri"
+times  = ["08:00", "13:00"]
+
+[[job]]
+name   = "vendor_report"
+script = 'jobs/example_vendor_report.py'
+days   = "2nd tue"
+times  = ["06:30"]
+
+[[job]]
+name   = "month_end"
+script = 'jobs/example_month_end.py'
+days   = "last day"
+times  = ["05:00"]
+
+[[job]]
+name          = "inbox_check"
+script        = 'jobs/example_inbox_check.py'
+days          = "mon-fri"
+every_minutes = 60
+between       = ["07:00", "17:00"]
+enabled       = false
