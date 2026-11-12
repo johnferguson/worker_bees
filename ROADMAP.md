@@ -134,3 +134,25 @@ A way to watch the jobs: what's waiting, what's running, what failed.
 - [ ] The monitor needs no special data of its own. It only reads the queue
       folders and the logs (plan 4), a bit like `tail` on a log file.
 - [ ] Turning the monitor off, or never using it, changes nothing else.
+
+### 6. File checks
+
+A way to tell that things finished, by checking that the files they make
+are there. It's an ordinary job in the schedule, so nothing else changes.
+
+- [ ] One list of checks (e.g. `002_worker_bees_checks.toml`). Each check
+      has a name, a file pattern, an optional due date, an email body file
+      and who to email.
+- [ ] File patterns use the date in the name: `{yyyymmdd}`, `{yesterday}`,
+      `{yyyymm}` and `*`, e.g. `{yyyymmdd}_sales.csv` or
+      `{yyyymm}*_month_end.csv`.
+- [ ] A file counts if it exists, whatever its size, so empty flag files
+      made with `touch` count as done.
+- [ ] Frequent checks: check one item and email only if it's missing.
+- [ ] Daily summary: always emails one list showing each item as done,
+      not due yet, or LATE. Due dates use the schedule's day rules (e.g.
+      `day 3`, `2nd tue`, `last day`). Because it always arrives, a missing
+      summary email is itself a warning that something is wrong.
+- [ ] Emails are sent with the email script we already have, not new code.
+- [ ] The worker change it needs: a schedule entry can pass values to its
+      script, e.g. `ZZZ_check_files.py sales_daily`.
