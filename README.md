@@ -33,6 +33,7 @@ top_level_directory/
 | `000_worker_bees_queue.toml` | Settings: where the folders are, how far ahead to build, job timeout |
 | `001_worker_bees_schedule.toml` | The scheduled jobs. The top of the file explains the options |
 | `ZZZ_check_folders.py` | Checks the folders exist |
+| `ZZZ_check_worker.py` | Checks this machine can work the queue: writes, reads, moves and deletes a test file the way a worker handles a job |
 | `ZZZ_build_queue.py` | Writes the `.sched` files from the schedule. `--preview` shows what it would do |
 | `ZZZ_worker.py` | The worker. Runs due jobs until none are left, then exits |
 | `worker_bees_settings.py` | Reads the settings file for the other scripts |
@@ -45,7 +46,9 @@ top_level_directory/
    four folders there. `uv run ZZZ_check_folders.py` checks them.
 3. Put your jobs in `001_worker_bees_schedule.toml`, check them with
    `uv run ZZZ_build_queue.py --preview`, then run `uv run ZZZ_build_queue.py`.
-4. Start a worker every few minutes on each machine (below).
+4. On each machine, run `uv run ZZZ_check_worker.py` to check it can reach
+   the folders and move files in them.
+5. Start a worker every few minutes on each machine (below).
 
 ### Windows: Task Scheduler
 

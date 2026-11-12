@@ -101,7 +101,8 @@ Open question:
 A way to test a worker when it's turned on, to see what it can reach and
 whether everything works as it should:
 
-- [ ] Can it see the queue folders, and can it move files in them?
+- [x] Can it see the queue folders, and can it write, read, move and delete
+      files in them? Done: `ZZZ_check_worker.py`
 - [ ] Which syncs and drives can it reach?
 - [ ] Are uv and Python working?
 - [ ] If the requirements table (plan 2) is in use: which jobs can this
